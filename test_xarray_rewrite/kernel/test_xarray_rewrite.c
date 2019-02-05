@@ -14,6 +14,11 @@
 /*MODULE_LICENSE("GPL");*/
 
 KTF_INIT();
+
+struct array_context {
+	struct ktf_context k;
+	struct xarray *xa;
+};
 /* DONE */
 
 static unsigned int tests_run;
@@ -75,22 +80,30 @@ static void *xa_store_order(struct xarray *xa, unsigned long index,
 
 	return curr;
 }
-
-static noinline void check_xa_err(struct xarray *xa)
-{
-	XA_BUG_ON(xa, xa_err(xa_store_index(xa, 0, GFP_NOWAIT)) != 0);
-	XA_BUG_ON(xa, xa_err(xa_erase(xa, 0)) != 0);
+	
+TEST(test_xarray_rewrite, check_xa_err) {
+	struct array_context *actx = KTF_CONTEXT_GET("array", struct array_context);
+	struct xarray *xa = actx->xa;
+	
+	EXPECT_FALSE(xa_err(xa_store_index(xa, 0, GFP_NOWAIT)) != 0);
+	EXPECT_FALSE(xa_err(xa_erase(xa, 0)) != 0);
 #ifndef __KERNEL__
 	/* The kernel does not fail GFP_NOWAIT allocations */
-	XA_BUG_ON(xa, xa_err(xa_store_index(xa, 1, GFP_NOWAIT)) != -ENOMEM);
-	XA_BUG_ON(xa, xa_err(xa_store_index(xa, 1, GFP_NOWAIT)) != -ENOMEM);
+	EXPECT_FALSE(xa_err(xa_store_index(xa, 1, GFP_NOWAIT)) != -ENOMEM);
+	EXPECT_FALSE(xa_err(xa_store_index(xa, 1, GFP_NOWAIT)) != -ENOMEM);
 #endif
-	XA_BUG_ON(xa, xa_err(xa_store_index(xa, 1, GFP_KERNEL)) != 0);
-	XA_BUG_ON(xa, xa_err(xa_store(xa, 1, xa_mk_value(0), GFP_KERNEL)) != 0);
-	XA_BUG_ON(xa, xa_err(xa_erase(xa, 1)) != 0);
+	EXPECT_FALSE(xa_err(xa_store_index(xa, 1, GFP_KERNEL)) != 0);
+	EXPECT_FALSE(xa_err(xa_store(xa, 1, xa_mk_value(0), GFP_KERNEL)) != 0);
+	EXPECT_FALSE(xa_err(xa_erase(xa, 1)) != 0);
 // kills the test-suite :-(
-//	XA_BUG_ON(xa, xa_err(xa_store(xa, 0, xa_mk_internal(0), 0)) != -EINVAL);
+//	EXPECT_FALSE(xa_err(xa_store(xa, 0, xa_mk_internal(0), 0)) != -EINVAL);
 }
+/*
+static noinline void check_xa_err(struct xarray *xa)
+{
+	ADD_TEST(check_xa_err_ktf);
+}
+*/
 
 static noinline void check_xas_retry(struct xarray *xa)
 {
@@ -334,6 +347,7 @@ static noinline void check_xa_shrink(struct xarray *xa)
 	}
 }
 
+//TEST(test_xarray_rewrite, check_cmpxchg) {
 static noinline void check_cmpxchg(struct xarray *xa)
 {
 	void *FIVE = xa_mk_value(5);
@@ -1206,11 +1220,18 @@ static noinline void check_destroy(struct xarray *xa)
 }
 
 static DEFINE_XARRAY(array);
+// ADDED
+static struct array_context cxa = { .xa = &array };
+//
 
 static int xarray_checks(void)
 {
+	KTF_CONTEXT_ADD(&cxa.k, "array");
+
 	// ADDED
-	check_xa_err(&array);
+	//check_xa_err(&array);
+	ADD_TEST(check_xa_err);
+	
 	check_xas_retry(&array);
 	check_xa_load(&array);
 	check_xa_mark(&array);
@@ -1261,13 +1282,15 @@ static int xarray_checks(void)
 	printk("XArray: %u of %u tests passed\n", tests_passed, tests_run);
 	return (tests_run == tests_passed) ? 0 : -EINVAL;
 	*/
+	return 0;
 }
 
 static void xarray_exit(void)
 {
-	/* ADDED KTF */
+	struct ktf_context *pctx = KTF_CONTEXT_FIND("array");
+	KTF_CONTEXT_REMOVE(pctx);
+
 	KTF_CLEANUP();
-	/* DONE */
 }
 
 module_init(xarray_checks);
