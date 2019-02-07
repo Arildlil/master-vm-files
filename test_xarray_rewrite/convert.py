@@ -12,11 +12,12 @@ def convert_to_test_macro(text):
     Converts regular test functions on the format
     "static noinline void check_XXX(struct xarray *xa)
     {",
-    where XXX is the rest of the function name after 'check_'. It captures 
-    and replaces the { in addition to the function signature, as this function
-    also adds context related code to the beginning of the function.
+    where XXX is the rest of the function name after 'check_'. It 
+    captures and replaces the { in addition to the function 
+    signature, as this function also adds context related code to 
+    the beginning of the function.
     """
-    reg = r"static noinline void (check_.*)\(struct xarray [*]xa\)\n\s*({)"
+    reg = r"static noinline void (check_.*)\((struct xarray [*]xa|void)\)\n\s*({)"
     ctx_code = r"""
         struct array_context *actx = KTF_CONTEXT_GET("array", struct array_context);
         struct xarray *xa = actx->xa;
