@@ -100,12 +100,6 @@ static noinline void check_xa_err(struct xarray *xa)
 // kills the test-suite :-(
 //	EXPECT_FALSE(xa_err(xa_store(xa, 0, xa_mk_internal(0), 0)) != -EINVAL);
 }
-/*
-static noinline void check_xa_err(struct xarray *xa)
-{
-	ADD_TEST(check_xa_err_ktf);
-}
-*/
 
 static noinline void check_xas_retry(struct xarray *xa)
 {

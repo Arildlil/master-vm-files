@@ -25,7 +25,7 @@ def convert_func_signature_to_test_macro(text):
     signature, as this function also adds context related code to 
     the beginning of the function.
     """
-    reg = r'static noinline void (check_.*)\((struct xarray [*]xa|void)\)\n\s*({)'
+    reg = r'static noinline void (check_[a-z_]*)\((struct xarray [*]xa|void)\)\n\s*({)'
     ctx_code = r"""
         struct array_context *actx = KTF_CONTEXT_GET("array", struct array_context);
         struct xarray *xa = actx->xa;
