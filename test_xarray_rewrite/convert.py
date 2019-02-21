@@ -20,12 +20,44 @@ with open(args.file, 'r') as f:
 # Code local for one specific test file. This could be supplied in
 # other ways, but currently it will be written here.
 # -------------------------------------------------------------------
-bp_test_code = r"""static struct array_context cxa = { .xa = &array };
+init_code = r"""static struct array_context cxa = { .xa = &array };
 
 KTF_INIT();
 
 \g<1>
-    \tKTF_CONTEXT_ADD(&cxa.k, "array");"""
+    \tKTF_CONTEXT_ADD(&cxa.k, "array");
+"""
+
+exit_code = r"""\g<1>
+        struct ktf_context *pctx = KTF_CONTEXT_FIND("data");
+        KTF_CONTEXT_REMOVE(pctx);
+        
+        KTF_CLEANUP();"""
+
+include_code = r"""\g<1>
+#include "ktf.h" 
+
+"""
+
+type_def_code = r"""\g<1>
+
+struct array_context {
+    struct ktf_context k;
+    struct xarray *xa;
+};
+
+"""
+
+boilerplate_test_code = r"""\g<1>
+
+        struct array_context *actx = KTF_CONTEXT_GET("array", struct array_context);
+        struct xarray *xa = actx->xa;
+        """
+
+test_suite_name = "test_xarray_rewrite"
+
+context_args = "struct xarray [*]xa|void"
+
 
 
 def printr(matches):
@@ -44,9 +76,13 @@ class CurrentState(object):
     functions, this can be done once and stored here for future use.
     """
 
-    def __init__(self, text, test_func_names, outfile_name, 
-        init_code=[], exit_code=[], bp_test_code=[], debug=True):
+    def __init__(self, text, test_func_names, outfile_name, test_suite_name, 
+        init_code="", exit_code="", include_code="", type_def_code="",
+        boilerplate_test_code="", ctx_args="", debug=True):
 
+
+        # Argument handling:
+        # ------------------
         # All the contents of the source file.
         self._text = text
 
@@ -56,6 +92,33 @@ class CurrentState(object):
         # The name of the file to write output to.
         self._outfile_name = outfile_name
 
+        # The name of the test suite itself.
+        self._test_suite_name = test_suite_name
+
+        # Code to be added to the init function of the module, if any.
+        self._init_code = init_code
+        
+        # Code to be added to the exit function of the module, if any.
+        self._exit_code = exit_code
+
+        # Code for header inclusion
+        self._include_code = include_code
+
+        # Code for definition of structs and typedefs.
+        self._type_def_code = type_def_code
+                
+        # Context code that should be added to the beginning
+        # of every TEST function.
+        self._boilerplate_test_code = boilerplate_test_code
+
+        # Common arguments which should be moved into a context instead.
+        self._context_args = context_args
+
+        self._debug = debug
+
+
+        # Other object variables used:
+        # ----------------------------
         # Will store the names of all local functions defined in
         # the file.
         self._local_function_names = {}
@@ -64,33 +127,49 @@ class CurrentState(object):
         # as all functions that have not been declared as test 
         # functions.
         self._local_helper_function_names = {}
-        
-        # Boiler plate code that should be added to the beginning
-        # of all TEST functions.
-        self._boilerplate_test_code = bp_test_code
 
-        # Code to be added to the init function of the module, if any.
-        self._init_code = init_code
-        
-        # Code to be added to the exit function of the module, if any.
-        self._exit_code = exit_code
-
-        self._debug = debug
+        # Counter that is concatenated to the name of a dummy 
+        # function to (hopefully) ensure unique names.
+        self._dummy_function_counter = 1
 
         self._module_init_name = ""
         self._module_exit_name = ""
 
+        self._extra_parameters = "struct ktf_test *self"
+        self._test_macro_result = "TEST({suite_name}, {test_name}) {{\n"
+        self._extra_parameters_result = "{sig}{ext_params}{opt_comma}{args}{end}\n{{"
+        self._test_macro_multi_args_result = "TEST({suite_name}_{number}_, {test_name}) {{\n\t{call}\n}}"
+        self._wrapped_multi_arg_function_calls = "{func_name}({extra_params}, {common_args}{extra_args});"
+
         # Regexes used in this class
         self._regexes = {
-            'all_static_functions': r"((static *(noinline)*? *([a-z_*0-9 ]+?) *([a-zA-Z_0-9]*)\()([a-z_*0-9,\n\t ]*)(\)))\s*{",
-            'module_init': r"module_init\((.*)\);",
-            'module_exit': r"module_exit\((.*)\);",
+            # Captures all static function definitions. Return types must be in all lowercase, and { on next line!
+            'all_static_functions': r"((static *(noinline)*? *([a-z_*0-9 ]+?) *([a-zA-Z_0-9]*)\()([a-z_*0-9,\n\t ]*)(\))\s*{)",
+            'find_module_init': r"module_init\((.*)\);",
+            'find_module_exit': r"module_exit\((.*)\);",
+            'main_function': "((static *(noinline)*? *([a-z_*0-9 ]+?) *({main})\()([a-z_*0-9,\n\t ]*)(\))\s*{{)",
+            'exit_function': "((static *(noinline)*? *([a-z_*0-9 ]+?) *({exit})\()([a-z_*0-9,\n\t ]*)(\))\s*{{)",
+            'includes_end': "(#include [<\"].*?[>\"].*)(\s*\n\s*\n)",
+            'statics_with_context_args': "((static *(noinline)*? *([a-z_*0-9 ]+?) *([a-zA-Z_0-9]*)\()({ctx_args})(\))\s*{{)",
+            'statics_with_context_and_extra_args': "((static *(noinline)*? *([a-z_*0-9 ]+?) *([a-zA-Z_0-9]*)\()({ctx_args})(.*)(\))\s*{{)",
+            'test_macro_function': "(TEST(.*?), *(.*?) *{)",
         }
             
+
+        # Calls to initialization methods:
+        # --------------------------------
         self._register_init_and_exit()
         self._register_local_functions()
         self._register_helper_functions()
+        self.dprintwl("self._test_function_names", self._test_function_names)
         self.dprintwl("self._boilerplate_test_code", self._boilerplate_test_code)
+        self.dprintwl("self._test_suite_name", self._test_suite_name)
+        self.dprintwl("self._init_code", self._init_code)
+        self.dprintwl("self._exit_code", self._exit_code)
+        self.dprintwl("self._include_code", self._include_code)
+        self.dprintwl("self._type_def_code", self._type_def_code)
+        self.dprintwl("self._boilerplate_test_code", self._boilerplate_test_code)
+        self.dprintwl("self._context_args", self._context_args)
 
 
     # Debug functions.
@@ -139,7 +218,7 @@ class CurrentState(object):
         self.dprintwl("Boilerplate TEST code:")
 
 
-    # Functions for registering info for later use.
+    # Private methods for registering info for later use.
 
     def _register_init_and_exit(self):
         """
@@ -148,8 +227,8 @@ class CurrentState(object):
         Linux module system, with the use of both 'module_init' 
         and 'module_exit'.
         """
-        reg_init = self._regexes['module_init']
-        reg_exit = self._regexes['module_exit']
+        reg_init = self._regexes['find_module_init']
+        reg_exit = self._regexes['find_module_exit']
         self._module_init_name = re.search(reg_init, self._text).group(1)
         self._module_exit_name = re.search(reg_exit, self._text).group(1)
         
@@ -179,15 +258,195 @@ class CurrentState(object):
             if func_name not in self._test_function_names and \
              func_name != self._module_init_name and \
              func_name != self._module_exit_name:   
+                
                 self._local_helper_function_names[func_name] = True
 
         self.dprintwl("self._local_helper_function_names:", self._local_helper_function_names)
 
+    
+    # Regex helper functions.
 
-state = CurrentState(data, args.testfuncs, args.out, \
-    bp_test_code=bp_test_code)
+    def _replace_if_valid_test_function(self, matches):
+        """
+        Replaces a match if the function is a test function 
+        "marked" for conversion.
+        """
+        test_name = matches.group(5)
+        if test_name in self._test_function_names:
+            return self._test_macro_result.format(
+                suite_name=self._test_suite_name, \
+                test_name=test_name)
+        else:
+            return matches.group(1)
+
+    def _replace_if_valid_multi_arg_test_function(self, matches):
+        """
+        Replaces a match if the function is a test function
+        "marked" for conversion, and has extra arguments.
+        """
+        test_name = matches.group(5)
+        common_args = matches.group(6)
+        extra_args = matches.group(7)
+        new_call = ""
+
+        # TODO: Fiks ferdig! Current call:
+        # new call: check_workingset(struct ktf_test *self, struct xarray *xa, unsigned long index;
+        # Bruk annet regex for å finne kallene på denne funksjonen og baser
+        # koden på dem istedenfor funksjonsdefinisjonen!
+
+        pprint(matches.group(1))
+        if test_name in self._test_function_names:
+            print("\ttest_name: " + test_name)
+            print("\t\told call: " + str(matches.groups()))
+            print("\tnew call: " + self._wrapped_multi_arg_function_calls.format(
+                func_name=test_name, extra_params=self._extra_parameters,
+                common_args=common_args, extra_args=extra_args))
+                #TEST({suite_name}_{number}, {test_name}) {{\n\t{call}\n}}"
+                #"self._wrapped_multi_arg_function_calls = "{func_name}({extra_params}, {common_args}{extra_args};""
+            self._dummy_function_counter += 1
+            return self._test_macro_multi_args_result.format(
+                suite_name=self._test_suite_name, number=self._dummy_function_counter,
+                test_name=test_name, call=new_call)
+
+    def _replace_if_helper_function(self, matches):
+        """
+        Replaces a match if the function if NOT a test function
+        "marked" for conversion.
+        """
+        function_signature = matches.group(2)
+        test_name = matches.group(5)
+        old_args = matches.group(6)
+        rest = matches.group(7)
+        optional_comma = ", "
+        if old_args == "" or old_args == "void":
+            optional_comma = ""
+            old_args = ""
+        if test_name in self._local_helper_function_names:
+            return self._extra_parameters_result.format(
+                sig=function_signature, ext_params=self._extra_parameters, 
+                opt_comma=optional_comma, args=old_args, end=rest)
+        else:
+            pprint("(1): " + str(matches.group(1)))
+            return matches.group(1)
+
+    def _sub(self, reg, result):
+        """
+        Performs the actual substitution with the regexes.
+        """
+        self._text = re.sub(reg, result, self._text)
+        return self
 
 
+    # Public methods for adding and/or replacing text.
+
+    def add_init_code_to_main(self):
+        """
+        Adds initialization code to the main function of the file.
+        """
+        return self._sub(
+            self._regexes['main_function'].format(main=self._module_init_name),
+            self._init_code)
+
+    def add_exit_code(self):
+        """
+        Adds cleanup code to the exit function of the file.
+        """
+        return self._sub(
+            self._regexes['exit_function'].format(exit=self._module_exit_name),
+            self._exit_code)
+
+    def add_include_code(self):
+        """
+        Adds additional code to include necessary headers.
+        """
+        return self._sub(
+            self._regexes['includes_end'],
+            self._include_code)
+
+    def add_type_definitions(self):
+        """
+        Adds type definitions such as structs and typedefs.
+        """
+        return self._sub(
+            self._regexes['includes_end'],
+            self._type_def_code)
+
+    def convert_to_test_common_args(self):
+        """
+        Converts all specified test functions to TEST functions,
+        given that they do not take any extra arguments compared 
+        to the common ones. For example, for test_xarray.c, 
+        'struct xarray *xa' is considered common arguments, and all
+        test functions only taking this single argument will be 
+        matched. Test functions with additional arguments will 
+        therefore NOT be matched here.
+        """
+        return self._sub(
+            self._regexes['statics_with_context_args'].format(
+                ctx_args=self._context_args),
+            self._replace_if_valid_test_function)
+
+    def convert_to_test_extra_args(self):
+        """
+        Converts the rest of the specified test functions to TEST 
+        functions, mainly those with additional arguments which are
+        not converted by 'convert_to_test_common_args'.
+        """
+        return self._sub(
+            self._regexes['statics_with_context_and_extra_args'].format(
+                ctx_args=self._context_args),
+            self._replace_if_valid_multi_arg_test_function)
+
+    def add_extra_parameters_to_helpers(self):
+        """
+        Adds a KTF self argument to all helper functions.
+        """
+        return self._sub(
+            self._regexes['all_static_functions'],
+            self._replace_if_helper_function)
+
+    def add_boilerplate_test_code(self):
+        """
+        Adds boilerplate test code to all test functions defined 
+        with the TEST macro. This can for example
+        """
+        return self._sub(
+            self._regexes['test_macro_function'],
+            self._boilerplate_test_code)
+
+    
+    # Other methods.
+
+    def result(self):
+        """
+        Prints the result to the earlier specified output stream.
+        """
+        with open(args.out, 'w') as f:
+            f.write(self._text)
+
+
+
+
+
+
+state = CurrentState(data, args.testfuncs, args.out, test_suite_name, \
+    init_code, exit_code, include_code, type_def_code, boilerplate_test_code, \
+    context_args, debug=False)
+
+state.add_include_code() \
+    .add_init_code_to_main() \
+    .add_exit_code() \
+    .add_type_definitions() \
+    .convert_to_test_common_args() \
+    .convert_to_test_extra_args() \
+    .add_boilerplate_test_code() \
+    .add_extra_parameters_to_helpers() \
+    .result()
+
+print(state._text)
+
+print(state._regexes['statics_with_context_args'].format(
+                ctx_args=state._context_args))
 
 # Utility functions
 
