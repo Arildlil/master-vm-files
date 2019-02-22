@@ -58,6 +58,10 @@ test_suite_name = "test_xarray_rewrite"
 
 context_args = "struct xarray [*]xa|void"
 
+common_call_args = "&array"
+
+common_call_multi_arg_replace = "xa"
+
 
 
 def printr(matches):
@@ -78,7 +82,8 @@ class CurrentState(object):
 
     def __init__(self, text, test_func_names, outfile_name, test_suite_name, 
         init_code="", exit_code="", include_code="", type_def_code="",
-        boilerplate_test_code="", ctx_args="", debug=True):
+        boilerplate_test_code="", ctx_args="", common_call_args="",
+        common_call_multi_arg_replace="", debug=True):
 
 
         # Argument handling:
@@ -114,6 +119,13 @@ class CurrentState(object):
         # Common arguments which should be moved into a context instead.
         self._context_args = context_args
 
+        # Common arguments which are often used when calling test functions.
+        self._common_call_args = common_call_args
+
+        # Replacement for _common_call_args for multi argument function calls
+        # that needs to be put in a dummy function.
+        self._common_call_multi_arg_replace = common_call_multi_arg_replace
+
         self._debug = debug
 
 
@@ -137,14 +149,19 @@ class CurrentState(object):
 
         self._extra_parameters = "struct ktf_test *self"
         self._test_macro_result = "TEST({suite_name}, {test_name}) {{\n"
+        self._dummy_function_name = "{func_name}_{counter}_"
+        self._dummy_function_body = "TEST({suite_name}, {dummy_name}) {{\n\t{call}\n}}"
+        self._dummy_function_result = "{dummy_body}\n\n{orig_func}"
+        self._add_test_call = "ADD_TEST({func_name});"
+        self._dummy_function_internal_call = "{func_name}({alt_args}, {rest_args});" # common_call_multi_arg_replace
         self._extra_parameters_result = "{sig}{ext_params}{opt_comma}{args}{end}\n{{"
-        self._test_macro_multi_args_result = "TEST({suite_name}_{number}_, {test_name}) {{\n\t{call}\n}}"
-        self._wrapped_multi_arg_function_calls = "{func_name}({extra_params}, {common_args}{extra_args});"
+        self._wrapped_multi_arg_function_calls = "{func_name}({common_args}{extra_args});"
 
         # Regexes used in this class
         self._regexes = {
             # Captures all static function definitions. Return types must be in all lowercase, and { on next line!
             'all_static_functions': r"((static *(noinline)*? *([a-z_*0-9 ]+?) *([a-zA-Z_0-9]*)\()([a-z_*0-9,\n\t ]*)(\))\s*{)",
+            'specific_static_function': "((static *(noinline)*? *([a-z_*0-9 ]+?) *({func_name})\()([a-z_*0-9,\n\t ]*)(\))\s*{{)",
             'find_module_init': r"module_init\((.*)\);",
             'find_module_exit': r"module_exit\((.*)\);",
             'main_function': "((static *(noinline)*? *([a-z_*0-9 ]+?) *({main})\()([a-z_*0-9,\n\t ]*)(\))\s*{{)",
@@ -153,6 +170,8 @@ class CurrentState(object):
             'statics_with_context_args': "((static *(noinline)*? *([a-z_*0-9 ]+?) *([a-zA-Z_0-9]*)\()({ctx_args})(\))\s*{{)",
             'statics_with_context_and_extra_args': "((static *(noinline)*? *([a-z_*0-9 ]+?) *([a-zA-Z_0-9]*)\()({ctx_args})(.*)(\))\s*{{)",
             'test_macro_function': "(TEST(.*?), *(.*?) *{)",
+            'function_calls_common_args': "(([a-zA-Z0-9_]*)\(({common_args})*\);)",
+            'multi_arg_test_function_calls': "(([a-zA-Z0-9_]*)\(({common_args}), *(.*?)\));",
         }
             
 
@@ -266,7 +285,7 @@ class CurrentState(object):
     
     # Regex helper functions.
 
-    def _replace_if_valid_test_function(self, matches):
+    def _replace_if_valid_test_function_def(self, matches):
         """
         Replaces a match if the function is a test function 
         "marked" for conversion.
@@ -279,39 +298,70 @@ class CurrentState(object):
         else:
             return matches.group(1)
 
+    def _replace_if_valid_test_function_call(self, matches):
+        """
+        Replaces a match if the function call is to a valid
+        standard-argument test function "marked" for conversion.
+        """
+        test_name = matches.group(2)
+        if test_name in self._test_function_names:
+            return self._add_test_call.format(func_name=test_name)
+        else:
+            return matches.group(1)
+
+        #self._dummy_function_internal_call = "{func_name}({alt_args}, {rest_args});" # common_call_multi_arg_replace
+
+
     def _replace_if_valid_multi_arg_test_function(self, matches):
         """
         Replaces a match if the function is a test function
         "marked" for conversion, and has extra arguments.
         """
-        test_name = matches.group(5)
-        common_args = matches.group(6)
-        extra_args = matches.group(7)
-        new_call = ""
-
-        # TODO: Fiks ferdig! Current call:
-        # new call: check_workingset(struct ktf_test *self, struct xarray *xa, unsigned long index;
-        # Bruk annet regex for å finne kallene på denne funksjonen og baser
-        # koden på dem istedenfor funksjonsdefinisjonen!
+        test_name = matches.group(2)
+        common_args = matches.group(3)
+        extra_args = matches.group(4)
+        old_call = matches.group(1)
 
         pprint(matches.group(1))
         if test_name in self._test_function_names:
-            print("\ttest_name: " + test_name)
+            dummy_func_name = self._dummy_function_name.format(
+                func_name=test_name, counter=self._dummy_function_counter)
+            modified_call = self._dummy_function_internal_call.format(
+                func_name=test_name, alt_args=self._common_call_multi_arg_replace,
+                rest_args=extra_args)
+            dummy_func_body = self._dummy_function_body.format(
+                suite_name=self._test_suite_name, dummy_name=dummy_func_name, 
+                call=modified_call)
+            add_test_call = self._add_test_call.format(func_name=dummy_func_name)
+            """
+            print("\tdummy_func_name: " + dummy_func_name)
             print("\t\told call: " + str(matches.groups()))
-            print("\tnew call: " + self._wrapped_multi_arg_function_calls.format(
-                func_name=test_name, extra_params=self._extra_parameters,
-                common_args=common_args, extra_args=extra_args))
-                #TEST({suite_name}_{number}, {test_name}) {{\n\t{call}\n}}"
-                #"self._wrapped_multi_arg_function_calls = "{func_name}({extra_params}, {common_args}{extra_args};""
+            print("\tinternal call: " + modified_call)
+            print("\tADD_TEST call: " + add_test_call)
+            print("\tdummy func body: " + dummy_func_body)
+            """
             self._dummy_function_counter += 1
-            return self._test_macro_multi_args_result.format(
-                suite_name=self._test_suite_name, number=self._dummy_function_counter,
-                test_name=test_name, call=new_call)
 
-    def _replace_if_helper_function(self, matches):
+            # Add dummy functions to a list of tuples that will be added to the
+            # code by the caller.
+            self._dummy_functions_to_add.append((test_name, dummy_func_body))
+            
+            return add_test_call
+        else: 
+            return matches.group(1)
+
+    def _is_helper_or_multi_arg_test_function(self, test_name):
         """
-        Replaces a match if the function if NOT a test function
-        "marked" for conversion.
+        Returns True if the test name refers to a helper function
+        or a test function with additional arguments.
+        """
+        return test_name in self._local_helper_function_names or \
+          test_name in self._test_function_names
+
+    def _add_extra_args_if_valid_definition(self, matches):
+        """
+        Replaces a match if the function is either a helper function
+        or a multiple argument function "marked" for conversion.
         """
         function_signature = matches.group(2)
         test_name = matches.group(5)
@@ -321,13 +371,25 @@ class CurrentState(object):
         if old_args == "" or old_args == "void":
             optional_comma = ""
             old_args = ""
-        if test_name in self._local_helper_function_names:
+        if self._is_helper_or_multi_arg_test_function(test_name):
+            #pprint("Modded (1): " + str(matches.group(1)))
             return self._extra_parameters_result.format(
                 sig=function_signature, ext_params=self._extra_parameters, 
                 opt_comma=optional_comma, args=old_args, end=rest)
         else:
             pprint("(1): " + str(matches.group(1)))
             return matches.group(1)
+
+    def _add_extra_args_if_valid_call(self, matches):
+        """
+        Adds an extra self argument to a call if the function is
+        either a helper function or a multiple argument function
+        "marked" for conversion.
+        """
+        # TODO: Continue from here!
+        # Current regex: (([a-zA-Z0-9_]+)\((.*))\);
+        pprint("CALL: " + str(matches.groups()))
+        return matches.group(1)
 
     def _sub(self, reg, result):
         """
@@ -384,7 +446,7 @@ class CurrentState(object):
         return self._sub(
             self._regexes['statics_with_context_args'].format(
                 ctx_args=self._context_args),
-            self._replace_if_valid_test_function)
+            self._replace_if_valid_test_function_def)
 
     def convert_to_test_extra_args(self):
         """
@@ -392,18 +454,49 @@ class CurrentState(object):
         functions, mainly those with additional arguments which are
         not converted by 'convert_to_test_common_args'.
         """
-        return self._sub(
-            self._regexes['statics_with_context_and_extra_args'].format(
-                ctx_args=self._context_args),
+        self._dummy_functions_to_add = []
+        self._sub(
+            self._regexes['multi_arg_test_function_calls'].format(
+                common_args=self._common_call_args),
             self._replace_if_valid_multi_arg_test_function)
+        # If there are dummy functions that needs to be added, it will be done here.
+        if self._dummy_functions_to_add:
+            print("# Dummy functions to add: " + str(len(self._dummy_functions_to_add)))
+            for dummy_tuple in self._dummy_functions_to_add:
+                self._sub(
+                    self._regexes['specific_static_function'].format(
+                        func_name=dummy_tuple[0]),
+                    self._dummy_function_result.format(
+                        dummy_body=dummy_tuple[1], orig_func="\g<1>"))
+        else:
+            print("No dummy functions to add!")
+        return self
 
-    def add_extra_parameters_to_helpers(self):
+    def convert_calls_to_add_test(self):
+        """
+        Converts all calls to the ordinary single/none argument
+        test functions, "marked" for conversions, to use ADD_TEST.
+        """
+        return self._sub(
+            self._regexes['function_calls_common_args'].format(
+                common_args=self._common_call_args),
+            self._replace_if_valid_test_function_call)
+
+    def add_extra_parameters_to_helpers_and_multi_arg_tests(self):
         """
         Adds a KTF self argument to all helper functions.
         """
         return self._sub(
             self._regexes['all_static_functions'],
-            self._replace_if_helper_function)
+            self._add_extra_args_if_valid_definition)
+
+    def add_self_argument_to_helper_calls(self):
+        """
+        Adds an extra self argument to calls on helper functions.
+        """
+        return self._sub(
+            self._regexes[''],
+            self._add_extra_args_if_valid_call)
 
     def add_boilerplate_test_code(self):
         """
@@ -431,7 +524,7 @@ class CurrentState(object):
 
 state = CurrentState(data, args.testfuncs, args.out, test_suite_name, \
     init_code, exit_code, include_code, type_def_code, boilerplate_test_code, \
-    context_args, debug=False)
+    context_args, common_call_args, common_call_multi_arg_replace, debug=False)
 
 state.add_include_code() \
     .add_init_code_to_main() \
@@ -439,8 +532,9 @@ state.add_include_code() \
     .add_type_definitions() \
     .convert_to_test_common_args() \
     .convert_to_test_extra_args() \
+    .convert_calls_to_add_test() \
     .add_boilerplate_test_code() \
-    .add_extra_parameters_to_helpers() \
+    .add_extra_parameters_to_helpers_and_multi_arg_tests() \
     .result()
 
 print(state._text)
