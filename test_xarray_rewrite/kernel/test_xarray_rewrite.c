@@ -582,7 +582,7 @@ TEST(test_xarray_rewrite, check_xa_alloc) {
 
 	/* Erasing it should make the array empty again */
 	xa_erase_index(self, &xa0, 0);
-	XA_BUG_ON(&xa0, !xa_empty(&xa0));
+	EXPECT_FALSE(!xa_empty(&xa0));
 
 	/* And it should assign 0 again */
 	xa_alloc_index(self, &xa0, 0, GFP_KERNEL);
@@ -609,15 +609,15 @@ TEST(test_xarray_rewrite, check_xa_alloc) {
 	xa_destroy(&xa0);
 
 	id = 0xfffffffeU;
-	XA_BUG_ON(&xa0, xa_alloc(&xa0, &id, UINT_MAX, xa_mk_value(0),
+	EXPECT_FALSE(xa_alloc(&xa0, &id, UINT_MAX, xa_mk_value(0),
 				GFP_KERNEL) != 0);
-	XA_BUG_ON(&xa0, id != 0xfffffffeU);
-	XA_BUG_ON(&xa0, xa_alloc(&xa0, &id, UINT_MAX, xa_mk_value(0),
+	EXPECT_FALSE(id != 0xfffffffeU);
+	EXPECT_FALSE(xa_alloc(&xa0, &id, UINT_MAX, xa_mk_value(0),
 				GFP_KERNEL) != 0);
-	XA_BUG_ON(&xa0, id != 0xffffffffU);
-	XA_BUG_ON(&xa0, xa_alloc(&xa0, &id, UINT_MAX, xa_mk_value(0),
+	EXPECT_FALSE(id != 0xffffffffU);
+	EXPECT_FALSE(xa_alloc(&xa0, &id, UINT_MAX, xa_mk_value(0),
 				GFP_KERNEL) != -ENOSPC);
-	XA_BUG_ON(&xa0, id != 0xffffffffU);
+	EXPECT_FALSE(id != 0xffffffffU);
 	xa_destroy(&xa0);
 }
 
@@ -1317,10 +1317,10 @@ static int xarray_checks(void)
 
 static void xarray_exit(void)
 {
-        struct ktf_context *pctx = KTF_CONTEXT_FIND("data");
-        KTF_CONTEXT_REMOVE(pctx);
+    struct ktf_context *pctx = KTF_CONTEXT_FIND("data");
+    KTF_CONTEXT_REMOVE(pctx);
         
-        KTF_CLEANUP();
+    KTF_CLEANUP();
 
 }
 
