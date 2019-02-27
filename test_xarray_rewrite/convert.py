@@ -59,10 +59,10 @@ KTF_INIT();
 """, 
     exit = 
 r"""\g<1>
-        struct ktf_context *pctx = KTF_CONTEXT_FIND("data");
-        KTF_CONTEXT_REMOVE(pctx);
+    struct ktf_context *pctx = KTF_CONTEXT_FIND("data");
+    KTF_CONTEXT_REMOVE(pctx);
         
-        KTF_CLEANUP();
+    KTF_CLEANUP();
 """,
     include = r"""\g<1>
 #include "ktf.h" 
@@ -87,7 +87,8 @@ r"""\g<1>
     extra_dummy_args_call = "xa",
     blacklist = ["test_update_node", "xa_load", "xa_alloc", "xas_retry", "xa_err"],
     replacements = [
-        (r"(^\s*)(XA_BUG_ON[(]xa, *)", "\g<1>EXPECT_FALSE(")
+        (r"(^\s*)(XA_BUG_ON[(]xa, *)", "\g<1>EXPECT_FALSE("),
+        (r"(^\s*)(XA_BUG_ON[(]&xa0, *)", "\g<1>EXPECT_FALSE(")
     ]
 )
 
