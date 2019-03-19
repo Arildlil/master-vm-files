@@ -42,7 +42,7 @@ static struct thread_self_pointer_ctx tsp;
 #define MAX_ENTRIES	1000000
 #define TEST_INSERT_FAIL INT_MAX
 
-static int parm_entries = 50000;
+static int parm_entries = 2500;
 module_param(parm_entries, int, 0);
 MODULE_PARM_DESC(parm_entries, "Number of entries to add (default: 50000)");
 
@@ -141,9 +141,9 @@ static int insert_retry(struct rhashtable *ht, struct test_obj *obj,
         break;
     insert_retry_end:
         err = -EBUSY;
-		
+
         /*
-            Selv om det hadde vært greit å beholdt den iftesten, så blir det 
+            Selv om det hadde vært greit å beholdt den iftesten, så blir det
             litt merkelig å både ha en assertion og en iftest som begge tester
             den samme statementen. Virker derfor som løsningen over er bedre.
         err = rhashtable_insert_fast(ht, &obj->node, params);
@@ -190,7 +190,7 @@ static int test_rht_lookup(struct rhashtable *ht, struct test_obj *array,
 			pr_warn("Test failed: Unexpected entry found for key %u\n",
 				key.id);
 			return -EEXIST;
-		}*/ 
+		}*/
 		ASSERT_FALSE_RETVAL((expected && obj) && (obj->value.id != i), -EINVAL);
 		/*
 		else if (expected && obj) {
@@ -232,7 +232,7 @@ static void test_bucket_stats(struct rhashtable *ht, unsigned int entries, struc
 				Kun for debug!
 			chain_len++;
 			continue;
-		
+
 		}*/
 		ASSERT_FALSE_BREAK(IS_ERR(pos));
 		/* else if (IS_ERR(pos)) {
@@ -313,7 +313,7 @@ static s64 test_rhashtable(struct rhashtable *ht, struct test_obj *array,
 
 		if (array[i].value.id != TEST_INSERT_FAIL) {
 			obj = rhashtable_lookup_fast(ht, &key, test_rht_params);
-            EXPECT_ADDR_NE(obj, NULL);
+			EXPECT_TRUE(obj != NULL);
 			/*
 			BUG_ON(!obj);
 			*/
@@ -356,7 +356,7 @@ static int test_rhltable(unsigned int entries, struct ktf_test *self)
 	ret = -ENOMEM;
 	obj_in_table = vzalloc(array_size(sizeof(unsigned long),
 					  BITS_TO_LONGS(entries)));
-    ASSERT_ADDR_NE_GOTO(obj_in_table, NULL, out_free);
+	ASSERT_TRUE_GOTO((obj_in_table != NULL), out_free);
 	/*
 	if (!obj_in_table)
 		goto out_free;
@@ -402,8 +402,7 @@ static int test_rhltable(unsigned int entries, struct ktf_test *self)
 		h = rhltable_lookup(&rhlt, &key, test_rht_params);
 		if (!h) {
 			rcu_read_unlock();
-			EXPECT_ADDR_NE(h, NULL);
-			break;
+			ASSERT_TRUE_BREAK((h != NULL));
 		}
 		/*
 		if (WARN(!h, "key not found during iteration %d of %d", i, entries)) {
@@ -595,7 +594,7 @@ static int test_rhashtable_max(struct test_obj *array,
 		err = insert_retry(&ht, obj, test_rht_params, self);
 		if (err > 0)
 			insert_retries += err;
-		else 
+		else
 			ASSERT_FALSE_RETVAL(err, err);
 		/*else if (err)
 			return err;
@@ -770,7 +769,7 @@ static int thread_lookup_test(struct thread_data *tdata, struct ktf_test *self)
 		*/
 
 		cond_resched();
-		
+
 		continue;
 	inc_err:
 		err++;
@@ -782,11 +781,11 @@ static int threadfunc(void *data)
 {
 	int i, step, err = 0; //, insert_retries = 0;
 	struct thread_data *tdata = data;
-    /* Added to avoid kernel crash... */
-    int max_iter, count;
 
-	struct thread_self_pointer_ctx* tsp_ctx = KTF_CONTEXT_GET("thread_self", struct thread_self_pointer_ctx);
-	struct ktf_test *self = tsp_ctx->self;
+	int max_iter, count;
+
+	struct thread_self_pointer_ctx* tsp = KTF_CONTEXT_GET("thread_self", struct thread_self_pointer_ctx);
+	struct ktf_test *self = tsp->self;
 
 	up(&prestart_sem);
 	EXPECT_INT_EQ(down_interruptible(&startup_sem), 0);
@@ -814,7 +813,8 @@ static int threadfunc(void *data)
 		pr_info("  thread[%d]: %u insertions retried due to memory pressure\n",
 			tdata->id, insert_retries);
 	*/
-	ASSERT_INT_EQ_GOTO((err = thread_lookup_test(tdata, self)), 0, out);
+	err = thread_lookup_test(tdata, self);
+	ASSERT_INT_EQ_GOTO(err, 0, out);
 	/*
 	err = thread_lookup_test(tdata);
 	if (err) {
@@ -824,13 +824,13 @@ static int threadfunc(void *data)
 	}
 	*/
 	/*
-	 * This counter is added, as the kernel crashes if the loop below is 
+	 * This counter is added, as the kernel crashes if the loop below is
 	 * allowed to run for as long as it wishes!
 	 */
-	max_iter = 51;
+	max_iter = 501;
+	count = 0;
 
 	for (step = 10; step > 0; step--) {
-		count = 0;
 		for (i = 0; i < tdata->entries; i += step) {
 			/* Check added for reasons explained above. */
 			count++;
@@ -878,7 +878,7 @@ out:
 /*
 static int __init test_rht_init(void)
 */
-TEST(test_rht, _test_rht_init)
+TEST(test_rht, test_rht_init2)
 {
 	unsigned int entries;
 	int i, err, started_threads = 0; //, failed_threads = 0;
@@ -886,8 +886,7 @@ TEST(test_rht, _test_rht_init)
 	struct thread_data *tdata;
 	struct test_obj *objs;
 
-	struct thread_self_pointer_ctx* tsp = KTF_CONTEXT_GET("thread_self", struct thread_self_pointer_ctx);
-	tsp->self = self;
+	KTF_CONTEXT_ADD(&tsp.k, "thread_self");
 
 	if (parm_entries < 0)
 		parm_entries = 1;
@@ -900,7 +899,7 @@ TEST(test_rht, _test_rht_init)
 
 	objs = vzalloc(array_size(sizeof(struct test_obj),
 				  test_rht_params.max_size + 1));
-    ASSERT_ADDR_NE(objs, NULL);
+    ASSERT_TRUE(objs != NULL);
     /*
         Bytte ut med statementen over?
 	if (!objs)
@@ -921,7 +920,7 @@ TEST(test_rht, _test_rht_init)
 
 		err = rhashtable_init(&ht, &test_rht_params);
         ASSERT_FALSE_CONT(err < 0);
-        /* 
+        /*
 		if (err < 0) {
 			pr_warn("Test failed: Unable to initialize hashtable: %d\n",
 				err);
@@ -932,7 +931,7 @@ TEST(test_rht, _test_rht_init)
 		time = test_rhashtable(&ht, objs, entries, self);
 		rhashtable_destroy(&ht);
         ASSERT_FALSE(time < 0);
-        /* 
+        /*
 		if (time < 0) {
 			vfree(objs);
 			pr_warn("Test failed: return code %lld\n", time);
@@ -955,7 +954,7 @@ TEST(test_rht, _test_rht_init)
 
 	test_insert_duplicates_run(self);
 
-    ASSERT_INT_NE(tcount, 0);
+    ASSERT_TRUE(tcount);
     /*
 	if (!tcount)
 		return 0;
@@ -965,14 +964,15 @@ TEST(test_rht, _test_rht_init)
     */
 	sema_init(&prestart_sem, 1 - tcount);
 	tdata = vzalloc(array_size(tcount, sizeof(struct thread_data)));
-    ASSERT_ADDR_NE(tdata, NULL);
+	ASSERT_TRUE(tdata != NULL);
+	/*ASSERT_TRUE_RETVAL(tdata, -ENOMEM);*/
     /*
 	if (!tdata)
 		return -ENOMEM;
     */
 	objs  = vzalloc(array3_size(sizeof(struct test_obj), tcount, entries));
 	/* Er dette virkelig en ønskelig løsning?? Rotete! */
-    ASSERT_ADDR_NE_GOTO(objs, NULL, _objs_null);
+    ASSERT_TRUE_GOTO((objs != NULL), _objs_null);
     /*
     if (!objs) {
 		vfree(tdata);
@@ -997,7 +997,7 @@ TEST(test_rht, _test_rht_init)
 		tdata[i].objs = objs + i * entries;
 		tdata[i].task = kthread_run(threadfunc, &tdata[i],
 		                            "rhashtable_thrad[%d]", i);
-        
+
 		ASSERT_FALSE_CONT(IS_ERR(tdata[i].task));
 		started_threads++;
 		/*
@@ -1019,9 +1019,8 @@ TEST(test_rht, _test_rht_init)
 		if (IS_ERR(tdata[i].task))
 			continue;
 		*/
-        err = kthread_stop(tdata[i].task);
-		//printk("Checking return value of 'kthread_stop': %d\n", err);
-		EXPECT_INT_EQ(err, 0);
+		err = kthread_stop(tdata[i].task);
+		EXPECT_FALSE(err);
 		/*
 		if ((err = kthread_stop(tdata[i].task))) {
 			pr_warn("Test failed: thread %d returned: %d\n",
@@ -1041,15 +1040,15 @@ TEST(test_rht, _test_rht_init)
 	err = test_rhltable(entries / 16, self);
 	/*pr_info("Started %d threads, %d failed, rhltable test returns %d\n",
 	        started_threads, failed_threads, err);*/
-    return;
+	printk("Finished executing 'test_rht_init'!\n");
+	return;
 _objs_null:
     vfree(tdata);
 }
 
 static int test_rht_init(void) {
-    KTF_CONTEXT_ADD(&tsp.k, "thread_self");
-
-	ADD_TEST(_test_rht_init);
+	ADD_TEST(test_rht_init2);
+	printk("Added TEST!\n");
 
 	return 0;
 }
@@ -1059,8 +1058,10 @@ static void __exit test_rht_exit(void)
 	/* KTF exit kode */
 	struct ktf_context *tctx = KTF_CONTEXT_FIND("thread_self");
     KTF_CONTEXT_REMOVE(tctx);
+	printk("Removing context 'thread_self'...\n");
 
 	KTF_CLEANUP();
+	printk("KTF_CLEANUP Done! Exiting...\n");
 	/* ----- */
 }
 
