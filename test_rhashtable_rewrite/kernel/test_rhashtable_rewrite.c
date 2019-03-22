@@ -313,7 +313,7 @@ static s64 test_rhashtable(struct rhashtable *ht, struct test_obj *array,
 
 		if (array[i].value.id != TEST_INSERT_FAIL) {
 			obj = rhashtable_lookup_fast(ht, &key, test_rht_params);
-			EXPECT_TRUE(obj != NULL);
+			ASSERT_TRUE(obj != NULL);
 			/*
 			BUG_ON(!obj);
 			*/
@@ -886,8 +886,6 @@ TEST(test_rht, test_rht_init2)
 	struct thread_data *tdata;
 	struct test_obj *objs;
 
-	KTF_CONTEXT_ADD(&tsp.k, "thread_self");
-
 	if (parm_entries < 0)
 		parm_entries = 1;
 
@@ -1047,6 +1045,8 @@ _objs_null:
 }
 
 static int test_rht_init(void) {
+	KTF_CONTEXT_ADD(&tsp.k, "thread_self");
+
 	ADD_TEST(test_rht_init2);
 	printk("Added TEST!\n");
 
@@ -1057,7 +1057,9 @@ static void __exit test_rht_exit(void)
 {
 	/* KTF exit kode */
 	struct ktf_context *tctx = KTF_CONTEXT_FIND("thread_self");
-    KTF_CONTEXT_REMOVE(tctx);
+	if (tctx) {
+    	KTF_CONTEXT_REMOVE(tctx);
+	}
 	printk("Removing context 'thread_self'...\n");
 
 	KTF_CLEANUP();
