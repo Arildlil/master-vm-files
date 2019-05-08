@@ -1006,8 +1006,8 @@ TEST(test_rht, test_rht_init2)
 		*/
 	}
 	/* Iftest med sideeffekter?? */
-	//if (down_interruptible(&prestart_sem))
-		//pr_err("  down interruptible failed\n");
+	/*if (down_interruptible(&prestart_sem))
+		pr_err("  down interruptible failed\n");*/
 	for (i = 0; i < tcount; i++)
 		up(&startup_sem);
 	for (i = 0; i < tcount; i++) {
@@ -1018,7 +1018,8 @@ TEST(test_rht, test_rht_init2)
 			continue;
 		*/
 		err = kthread_stop(tdata[i].task);
-		EXPECT_FALSE(err);
+		/*EXPECT_FALSE(err);*/
+		EXPECT_INT_EQ(err, 0);
 		/*
 		if ((err = kthread_stop(tdata[i].task))) {
 			pr_warn("Test failed: thread %d returned: %d\n",
