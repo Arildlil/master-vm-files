@@ -1006,7 +1006,7 @@ TEST(test_rht, test_rht_init2)
 		*/
 	}
 	/* Iftest med sideeffekter?? */
-	if (down_interruptible(&prestart_sem))
+	//if (down_interruptible(&prestart_sem))
 		//pr_err("  down interruptible failed\n");
 	for (i = 0; i < tcount; i++)
 		up(&startup_sem);
