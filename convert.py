@@ -3,10 +3,12 @@ from pprint import pprint
 from collections import namedtuple
 from string import whitespace
 
+
+"""
 ConversionRules = namedtuple('ConversionRules', 
     'test_funcs init exit include new_types boilerplate suite_name ctx_args_def \
     cmn_test_args_call extra_dummy_args_call blacklist replacements')
-
+"""
 
 # Argsparse related code
 # -------------------------------------------------------------------
@@ -31,8 +33,8 @@ with open(args.file, 'r') as f:
 # | Conversion rules for "test_xarray_rewrite.c" |
 # |----------------------------------------------|
 
-test_xarray_rules = ConversionRules(
-    test_funcs =
+test_xarray_rules = {
+    "test_funcs":
     """
     check_xa_err 
     check_xas_retry
@@ -54,7 +56,7 @@ test_xarray_rules = ConversionRules(
 	check_store_iter
 	check_workingset
     """,
-    init = 
+    "init": 
 r"""static struct array_context cxa = { .xa = &array };
 
 KTF_INIT();
@@ -62,18 +64,18 @@ KTF_INIT();
 \g<1>
     \tKTF_CONTEXT_ADD(&cxa.k, "array");
 """, 
-    exit = 
+    "exit":
 r"""\g<1>
     struct ktf_context *pctx = KTF_CONTEXT_FIND("data");
     KTF_CONTEXT_REMOVE(pctx);
         
     KTF_CLEANUP();
 """,
-    include = r"""\g<1>
+    "include": r"""\g<1>
 #include "ktf.h" 
 
 """,
-    new_types = r"""\g<1>
+    "new_types": r"""\g<1>
 
 struct array_context {
     struct ktf_context k;
@@ -81,21 +83,42 @@ struct array_context {
 };
 
 """,
-    boilerplate = 
+    "boilerplate": 
 r"""\g<1>
         struct array_context *actx = KTF_CONTEXT_GET("array", struct array_context);
         struct xarray *xa = actx->xa;
     """,
-    suite_name = "test_xarray_rewrite",
-    ctx_args_def = "struct xarray [*]xa|void",
-    cmn_test_args_call = "&array",
-    extra_dummy_args_call = "xa",
-    blacklist = ["test_update_node", "xa_load", "xa_alloc", "xas_retry", "xa_err"],
-    replacements = [
+    "suite_name": "test_xarray_rewrite",
+    "ctx_args_def": "struct xarray [*]xa|void",
+    "cmn_test_args_call": "&array",
+    "extra_dummy_args_call": "xa",
+    "blacklist": ["test_update_node", "xa_load", "xa_alloc", "xas_retry", "xa_err"],
+    "replacements": [
         (r"(^\s*)(XA_BUG_ON[(]xa, *)", "\g<1>EXPECT_FALSE("),
         (r"(^\s*)(XA_BUG_ON[(]&xa0, *)", "\g<1>EXPECT_FALSE(")
+    ],
+    "should_add_new_main": False
+}
+
+
+
+# |----------------------------------------------|
+# | Conversion rules for "test_sort_rewrite.c" |
+# |----------------------------------------------|
+
+test_sort_rules = {
+    "test_funcs":
+    """
+    test_sort_init
+    """,
+    "suite_name": "test_sort_rewrite",
+    "blacklist": ["cmpint"],
+    "replacements": [
+        (
+r"""if (!a)
+		return err;""", "ASSERT_INT_NE(a,0);")
     ]
-)
+}
 
 
 
@@ -112,7 +135,7 @@ def printr(matches):
     def __init__(self, text, test_func_names="", outfile_name, test_suite_name="", 
         ignore_func_names="", init_code="", exit_code="", include_code="", type_def_code="",
         boilerplate_test_code="", ctx_args="", common_call_args="",
-        common_call_multi_arg_replace="", assertion_replacements="", debug=True):
+        common_call_multi_arg_replace="", assertion_replacements="", add_new_main=False, debug=True):
     """
 class CurrentState(object):
     """
@@ -120,9 +143,24 @@ class CurrentState(object):
     as well as information about the file in question. For example,
     instead of repeatedly using a regex to find all locally defined
     functions, this can be done once and stored here for future use.
+
+    The most important fields to specify, for the 'rules' dict argument,
+    is the following:
+        ["test_funcs"], # Names of the test functions to convert to the TEST macro.
+        ["blacklist"]   # Names of functions that should NOT be converted to the TEST macro.
+    The class will add some KTF related code, even if an empty dict is passed
+    as the 'rules' argument, although little code will be added in that case.
     """
 
     def __init__(self, text, outfile_name, rules, debug=False):
+
+        # Default KTF snippets
+        # --------------------
+        self._default_init_code = "KTF_INIT();\n\n\g<1>"
+        self._default_exit_code = '\g<1>\n\tKTF_CLEANUP();'
+        self._default_include_code = '\g<1>\n#include "ktf.h"\n'
+        self._default_cmn_test_args_call = ""
+        self._default_context_args = "void|''"
 
         # Argument handling:
         # ------------------
@@ -133,42 +171,52 @@ class CurrentState(object):
         self._outfile_name = outfile_name
 
         # Names of all the functions to convert to TEST.
-        self._test_function_names = rules.test_funcs
+        self._test_function_names = rules.get("test_funcs")
 
         # Code to be added to the init function of the module, if any.
-        self._init_code = rules.init
+        self._init_code = rules.get("init") or self._default_init_code
         
         # Code to be added to the exit function of the module, if any.
-        self._exit_code = rules.exit
+        self._exit_code = rules.get("exit") or self._default_exit_code
 
         # Code for header inclusion
-        self._include_code = rules.include
+        self._include_code = rules.get("include") or self._default_include_code
 
         # Code for definition of structs and typedefs.
-        self._type_def_code = rules.new_types
+        self._type_def_code = rules.get("new_types")
                 
         # Context code that should be added to the beginning
         # of every TEST function.
-        self._boilerplate_test_code = rules.boilerplate
+        self._boilerplate_test_code = rules.get("boilerplate")
 
         # The name of the test suite itself.
-        self._test_suite_name = rules.suite_name
+        self._test_suite_name = rules.get("suite_name")
 
-        # Common arguments which should be moved into a context instead.
-        self._context_args = rules.ctx_args_def
+        # Common arguments used by most test functions, which could be moved 
+        # into a context instead. The default value is "void|''", meaning
+        # no arguments. 
+        self._context_args = rules.get("ctx_args_def") or self._default_context_args
 
-        # Common arguments which are often used when calling test functions.
-        self._common_call_args = rules.cmn_test_args_call
+        # Common arguments often used when calling test functions. For the xarray suite,
+        # this is the '&array' argument supplied to all test functions. For functions
+        # without arguments, this could be '' or 'void'.
+        self._common_call_args = rules.get("cmn_test_args_call") or self._default_cmn_test_args_call
 
         # Replacement for _common_call_args for multi argument function calls
         # that needs to be put in a dummy function.
-        self._common_call_multi_arg_replace = rules.extra_dummy_args_call
+        self._common_call_multi_arg_replace = rules.get("extra_dummy_args_call")
 
         # The names of functions to be ignored.
-        self._ignore_func_names = rules.blacklist
+        self._ignore_func_names = rules.get("blacklist")
 
         # Specifies which assertions to convert to which KTF assertions.
-        self._assertion_replacements = rules.replacements
+        self._assertion_replacements = rules.get("replacements")
+
+        # Adds a new main function if set to True. The name of this new main 
+        # function will be the function name argument in the call 'module_init' 
+        # with "_1" appended to the end (specified by self._new_main_name). 
+        # For example "test_xarray_init" -> "test_xarray_init_1"
+        self._should_add_new_main = rules.get("should_add_new_main")
 
         self._debug = debug
 
@@ -208,6 +256,9 @@ class CurrentState(object):
         self._extra_ktf_args_calls = "{func_name}({new_args}{old_arg_char}"
         self._extra_ktf_args_calls_no_args = "{func_name}({new_args})"
         self._wrapped_multi_arg_function_calls = "{func_name}({common_args}{extra_args});"
+        self._new_main_name = "{old_name}_1"
+        self._new_module_init = "module_init({new_main_name});\n"
+        self._new_main_and_module_init = "int {new_main_name}(void)\n{{\n\tADD_TEST({old_main});\n\n\treturn 0;\n}}\n\nmodule_init({new_main_name});"
 
         # Regexes used in this class
         self._regexes = {
@@ -239,6 +290,14 @@ class CurrentState(object):
         self._register_init_and_exit()
         self._register_local_functions()
         self._register_helper_functions()
+
+        if self._should_add_new_main:
+            self._add_new_main()
+        
+        # This action is repeated in case the "_add_new_main" method changes
+        # the init function name.
+        self._register_init_and_exit()
+
         self.dprintwl("self._test_function_names", self._test_function_names)
         self.dprintwl("self._boilerplate_test_code", self._boilerplate_test_code)
         self.dprintwl("self._test_suite_name", self._test_suite_name)
@@ -309,6 +368,8 @@ class CurrentState(object):
         reg_exit = self._regexes['find_module_exit']
         self._module_init_name = re.search(reg_init, self._text).group(1)
         self._module_exit_name = re.search(reg_exit, self._text).group(1)
+        if not self._test_suite_name:
+            self._test_suite_name = self._module_init_name
         
         self.dprintwl("module_init_name", self._module_init_name)
         self.dprintwl("module_exit_name", self._module_exit_name)
@@ -339,6 +400,9 @@ class CurrentState(object):
         Registers all local functions that have not been 
         specified as a main test function.
         """
+        if not self._local_function_names or not self._test_function_names:
+            self.dprintwl("Local function names unspecified!")
+            return
         for func_name in self._local_function_names:
             if func_name not in self._test_function_names and \
              func_name != self._module_init_name and \
@@ -639,6 +703,20 @@ class CurrentState(object):
             self._regexes['test_macro_function'],
             self._boilerplate_test_code)
 
+    def _add_new_main(self):
+        """
+        Adds a new main function if the previous main was converted to a TEST
+        function. Automatically called if "should_add_new_main" rule is True.
+        """
+        old_main_name = self._module_init_name
+        new_main_name = self._new_main_name.format(old_name=old_main_name)
+        self.dprintwl("new_main_name", new_main_name)
+        self._sub(
+            self._regexes['find_module_init'],
+            self._new_main_and_module_init.format(
+                new_main_name=new_main_name, old_main=old_main_name))
+        return self
+
     
     # Other methods.
 
@@ -677,6 +755,28 @@ if args.file.endswith("test_xarray_rewrite.c"):
     .convert_assertions() \
     .result()
 
+test_sort_rules_2 = {
+    "test_funcs":
+    """
+    test_sort_init
+    """,
+    "blacklist": ["cmpint"],
+    "should_add_new_main": True
+}
+
+print(args.file)
+if args.file.endswith("test_sort_rewrite.c"):
+    state = CurrentState(data, args.out, test_sort_rules_2, True)
+    print("Converting " + args.file)
+    state.add_include_code() \
+    .add_init_code_to_main() \
+    .add_exit_code() \
+    .convert_to_test_common_args() \
+    .result()
+    #.convert_to_test_common_args() \
+    #.convert_calls_to_add_test() \
+    #.convert_assertions() \
+    #.result()
 
 
 
