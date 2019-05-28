@@ -31,17 +31,8 @@ TEST(test_sort_rewrite, test_sort_init_2)
 
 	err = -EINVAL;
 	for (i = 0; i < TEST_LEN-1; i++)
-		if (a[i] > a[i+1]) {
-			pr_err("test has failed\n");
-			
-		}
 		ASSERT_FALSE_GOTO(a[i] > a[i+1], exit);
-		/*if (a[i] > a[i+1]) {
-			pr_err("test has failed\n");
-			goto exit;
-		}*/
 	err = 0;
-	pr_info("test passed\n");
 exit:
 	kfree(a);
 	ASSERT_INT_EQ(err, 0);
