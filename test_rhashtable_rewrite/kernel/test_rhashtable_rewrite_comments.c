@@ -131,7 +131,7 @@ static struct semaphore startup_sem = __SEMAPHORE_INITIALIZER(startup_sem, 0);
 static int insert_retry(struct rhashtable *ht, struct test_obj *obj,
                         const struct rhashtable_params params, struct ktf_test *self)
 {
-	int err, retries = -1;
+	int err, retries = -1; /* Trengs ikke lenger! , enomem_retries = 0;*/
 
 	do {
 		retries++;
@@ -142,15 +142,22 @@ static int insert_retry(struct rhashtable *ht, struct test_obj *obj,
     insert_retry_end:
         err = -EBUSY;
 
-        /* Old code:
-        
-		err = rhashtable_insert_fast(ht, &obj->node, params);
+        /*
+            Selv om det hadde vært greit å beholdt den iftesten, så blir det
+            litt merkelig å både ha en assertion og en iftest som begge tester
+            den samme statementen. Virker derfor som løsningen over er bedre.
+        err = rhashtable_insert_fast(ht, &obj->node, params);
 		if (err == -ENOMEM && enomem_retry) {
 			enomem_retries++;
 			err = -EBUSY;
 		}*/
 	} while (err == -EBUSY);
 
+    /*
+    Fjerne dette, da det bare er debugprinting!
+	if (enomem_retries)
+		pr_info(" %u insertions retried after -ENOMEM\n",
+			enomem_retries);*/
 	return err ? : retries;
 }
 
@@ -172,8 +179,28 @@ static int test_rht_lookup(struct rhashtable *ht, struct test_obj *array,
 		obj = rhashtable_lookup_fast(ht, &key, test_rht_params);
 
 		ASSERT_FALSE_RETVAL(expected && !obj, -ENOENT);
+        /*
+		if (expected && !obj) {
+			pr_warn("Test failed: Could not find key %u\n", key.id);
+			return -ENOENT;
+		}*/
 		ASSERT_FALSE_RETVAL(!expected && obj, -EEXIST);
+		/*
+		else if (!expected && obj) {
+			pr_warn("Test failed: Unexpected entry found for key %u\n",
+				key.id);
+			return -EEXIST;
+		}*/
 		ASSERT_FALSE_RETVAL((expected && obj) && (obj->value.id != i), -EINVAL);
+		/*
+		else if (expected && obj) {
+			if (obj->value.id != i) {
+				pr_warn("Test failed: Lookup value mismatch %u!=%u\n",
+					obj->value.id, i);
+				return -EINVAL;
+			}
+		}
+		*/
 
 		cond_resched_rcu();
 	}
@@ -188,13 +215,31 @@ static void test_bucket_stats(struct rhashtable *ht, unsigned int entries, struc
 	struct rhash_head *pos;
 
 	err = rhashtable_walk_init(ht, &hti, GFP_KERNEL);
-	ASSERT_FALSE(err);
+	/*
+	if (err) {
+		pr_warn("Test failed: allocation error");
+		return;
+	}
+	*/
 
 	rhashtable_walk_start(&hti);
 
 	while ((pos = rhashtable_walk_next(&hti))) {
 		ASSERT_FALSE_CONT(PTR_ERR(pos) == -EAGAIN);
+		/*
+		if (PTR_ERR(pos) == -EAGAIN) {
+			pr_info("Info: encountered resize\n");
+				Kun for debug!
+			chain_len++;
+			continue;
+
+		}*/
 		ASSERT_FALSE_BREAK(IS_ERR(pos));
+		/* else if (IS_ERR(pos)) {
+			pr_warn("Test failed: rhashtable_walk_next() error: %ld\n",
+				PTR_ERR(pos));
+			break;
+		}*/
 
 		total++;
 	}
@@ -202,8 +247,17 @@ static void test_bucket_stats(struct rhashtable *ht, unsigned int entries, struc
 	rhashtable_walk_stop(&hti);
 	rhashtable_walk_exit(&hti);
 
+	/*
+	pr_info("  Traversal complete: counted=%u, nelems=%u, entries=%d, table-jumps=%u\n",
+		total, atomic_read(&ht->nelems), entries, chain_len);
+	*/
+
 	EXPECT_TRUE(total == atomic_read(&ht->nelems));
 	EXPECT_TRUE(total == entries);
+	/*
+	if (total != atomic_read(&ht->nelems) || total != entries)
+		pr_warn("Test failed: Total count mismatch ^^^");
+	*/
 }
 
 static s64 test_rhashtable(struct rhashtable *ht, struct test_obj *array,
@@ -218,6 +272,9 @@ static s64 test_rhashtable(struct rhashtable *ht, struct test_obj *array,
 	 * Insertion Test:
 	 * Insert entries into table with all keys even numbers
 	 */
+	/*
+	pr_info("  Adding %d keys\n", entries);
+	*/
 	start = ktime_get_ns();
 	for (i = 0; i < entries; i++) {
 		struct test_obj *obj = &array[i];
@@ -228,8 +285,17 @@ static s64 test_rhashtable(struct rhashtable *ht, struct test_obj *array,
 			insert_retries += err;
 		else
 			ASSERT_FALSE_RETVAL(err, err);
+		/*
+		else if (err)
+			return err;
+		*/
 	}
 
+	/*
+	if (insert_retries)
+		pr_info("  %u insertions retried due to memory pressure\n",
+			insert_retries);
+	*/
 	test_bucket_stats(ht, entries, self);
 	rcu_read_lock();
 	test_rht_lookup(ht, array, entries, self);
@@ -237,6 +303,9 @@ static s64 test_rhashtable(struct rhashtable *ht, struct test_obj *array,
 
 	test_bucket_stats(ht, entries, self);
 
+	/*
+	pr_info("  Deleting %d keys\n", entries);
+	*/
 	for (i = 0; i < entries; i++) {
 		struct test_obj_val key = {
 			.id = i * 2,
@@ -245,6 +314,9 @@ static s64 test_rhashtable(struct rhashtable *ht, struct test_obj *array,
 		if (array[i].value.id != TEST_INSERT_FAIL) {
 			obj = rhashtable_lookup_fast(ht, &key, test_rht_params);
 			ASSERT_TRUE(obj != NULL);
+			/*
+			BUG_ON(!obj);
+			*/
 
 			rhashtable_remove_fast(ht, &obj->node, test_rht_params);
 		}
@@ -253,6 +325,9 @@ static s64 test_rhashtable(struct rhashtable *ht, struct test_obj *array,
 	}
 
 	end = ktime_get_ns();
+	/*
+	pr_info("  Duration of test: %lld ns\n", end - start);
+	*/
 
 	return end - start;
 }
@@ -273,14 +348,26 @@ static int test_rhltable(unsigned int entries, struct ktf_test *self)
 	rhl_test_objects = vzalloc(array_size(entries,
 					      sizeof(*rhl_test_objects)));
 	ASSERT_TRUE_RETVAL((rhl_test_objects != NULL), -ENOMEM);
+	/*
+	if (!rhl_test_objects)
+		return -ENOMEM;
+	*/
 
 	ret = -ENOMEM;
 	obj_in_table = vzalloc(array_size(sizeof(unsigned long),
 					  BITS_TO_LONGS(entries)));
 	ASSERT_TRUE_GOTO((obj_in_table != NULL), out_free);
+	/*
+	if (!obj_in_table)
+		goto out_free;
+	*/
 
 	err = rhltable_init(&rhlt, &test_rht_params);
 	ASSERT_FALSE_GOTO(err, out_free);
+	/*
+	if (WARN_ON(err))
+		goto out_free;
+	*/
 
 	k = prandom_u32();
 	ret = 0;
@@ -289,6 +376,10 @@ static int test_rhltable(unsigned int entries, struct ktf_test *self)
 		err = rhltable_insert(&rhlt, &rhl_test_objects[i].list_node,
 				      test_rht_params);
 		ASSERT_FALSE_BREAK(err);
+		/*
+		if (WARN(err, "error %d on element %d\n", err, i))
+			break;
+		*/
 		if (err == 0)
 			set_bit(i, obj_in_table);
 	}
@@ -296,6 +387,9 @@ static int test_rhltable(unsigned int entries, struct ktf_test *self)
 	if (err)
 		ret = err;
 
+	/*
+	pr_info("test %d add/delete pairs into rhlist\n", entries);
+	*/
 	for (i = 0; i < entries; i++) {
 		struct rhlist_head *h, *pos;
 		struct test_obj_rhl *obj;
@@ -310,11 +404,21 @@ static int test_rhltable(unsigned int entries, struct ktf_test *self)
 			rcu_read_unlock();
 			ASSERT_TRUE_BREAK((h != NULL));
 		}
+		/*
+		if (WARN(!h, "key not found during iteration %d of %d", i, entries)) {
+			rcu_read_unlock();
+			break;
+		}
+		*/
 
 		if (i) {
 			j = i - 1;
 			rhl_for_each_entry_rcu(obj, pos, h, list_node) {
 				ASSERT_FALSE_BREAK(pos == &rhl_test_objects[j].list_node);
+				/*
+				if (WARN(pos == &rhl_test_objects[j].list_node, "old element found, should be gone"))
+					break;
+				*/
 			}
 		}
 
@@ -332,9 +436,16 @@ static int test_rhltable(unsigned int entries, struct ktf_test *self)
 		rcu_read_unlock();
 
 		ASSERT_TRUE_BREAK(found);
+		/*
+		if (WARN(!found, "element %d not found", i))
+			break;
+		*/
 
 		err = rhltable_remove(&rhlt, &rhl_test_objects[i].list_node, test_rht_params);
 		EXPECT_FALSE(err);
+		/*
+		WARN(err, "rhltable_remove: err %d for iteration %d\n", err, i);
+		*/
 		if (err == 0)
 			clear_bit(i, obj_in_table);
 	}
@@ -344,14 +455,22 @@ static int test_rhltable(unsigned int entries, struct ktf_test *self)
 
 	for (i = 0; i < entries; i++) {
 		EXPECT_FALSE(test_bit(i, obj_in_table));
+		/*
+		WARN(test_bit(i, obj_in_table), "elem %d allegedly still present", i);
+		*/
 
 		err = rhltable_insert(&rhlt, &rhl_test_objects[i].list_node,
 				      test_rht_params);
 		ASSERT_FALSE_BREAK(err);
+		/*
+		if (WARN(err, "error %d on element %d\n", err, i))
+			break;
+		*/
 		if (err == 0)
 			set_bit(i, obj_in_table);
 	}
 
+	//pr_info("test %d random rhlist add/delete operations\n", entries);
 	for (j = 0; j < entries; j++) {
 		u32 i = prandom_u32_max(entries);
 		u32 prand = prandom_u32();
@@ -370,8 +489,17 @@ static int test_rhltable(unsigned int entries, struct ktf_test *self)
 		if (test_bit(i, obj_in_table)) {
 			clear_bit(i, obj_in_table);
 			ASSERT_FALSE_CONT(err);
+			/*
+			if (WARN(err, "cannot remove element at slot %d", i))
+				continue;
+			*/
 		} else {
 			ASSERT_TRUE_CONT(err == -ENOENT);
+			/*
+			if (WARN(err != -ENOENT, "removed non-existant element %d, error %d not %d",
+			     i, err, -ENOENT))
+				continue;
+			*/
 		}
 
 		if (prand & 1) {
@@ -382,8 +510,16 @@ static int test_rhltable(unsigned int entries, struct ktf_test *self)
 		err = rhltable_insert(&rhlt, &rhl_test_objects[i].list_node, test_rht_params);
 		if (err == 0) {
 			ASSERT_FALSE_CONT(test_and_set_bit(i, obj_in_table));
+			/*
+			if (WARN(test_and_set_bit(i, obj_in_table), "succeeded to insert same object %d", i))
+				continue;
+			*/
 		} else {
 			ASSERT_TRUE_CONT(test_bit(i, obj_in_table));
+			/*
+			if (WARN(!test_bit(i, obj_in_table), "failed to insert object %d", i))
+				continue;
+			*/
 		}
 
 		if (prand & 1) {
@@ -395,11 +531,17 @@ static int test_rhltable(unsigned int entries, struct ktf_test *self)
 		if (test_bit(i, obj_in_table)) {
 			err = rhltable_remove(&rhlt, &rhl_test_objects[i].list_node, test_rht_params);
 			EXPECT_FALSE(err);
+			/*
+			WARN(err, "cannot remove element at slot %d", i);
+			*/
 			if (err == 0)
 				clear_bit(i, obj_in_table);
 		} else {
 			err = rhltable_insert(&rhlt, &rhl_test_objects[i].list_node, test_rht_params);
 			EXPECT_FALSE(err);
+			/*
+			WARN(err, "failed to insert object %d", i);
+			*/
 			if (err == 0)
 				set_bit(i, obj_in_table);
 		}
@@ -410,8 +552,17 @@ static int test_rhltable(unsigned int entries, struct ktf_test *self)
 		err = rhltable_remove(&rhlt, &rhl_test_objects[i].list_node, test_rht_params);
 		if (test_bit(i, obj_in_table)) {
 			ASSERT_FALSE_CONT(err);
+			/*
+			if (WARN(err, "cannot remove element at slot %d", i))
+				continue;
+			*/
 		} else {
 			ASSERT_TRUE_CONT(err == -ENOENT);
+			/*
+			if (WARN(err != -ENOENT, "removed non-existant element, error %d not %d",
+				 err, -ENOENT))
+			continue;
+			*/
 		}
 	}
 
@@ -431,6 +582,10 @@ static int test_rhashtable_max(struct test_obj *array,
 	test_rht_params.max_size = roundup_pow_of_two(entries / 8);
 	err = rhashtable_init(&ht, &test_rht_params);
 	ASSERT_FALSE_RETVAL(err, err);
+	/*
+	if (err)
+		return err;
+	*/
 
 	for (i = 0; i < ht.max_elems; i++) {
 		struct test_obj *obj = &array[i];
@@ -441,12 +596,19 @@ static int test_rhashtable_max(struct test_obj *array,
 			insert_retries += err;
 		else
 			ASSERT_FALSE_RETVAL(err, err);
+		/*else if (err)
+			return err;
+		*/
 	}
 
 	err = insert_retry(&ht, &array[ht.max_elems], test_rht_params, self);
 	if (err == -E2BIG) {
 		err = 0;
 	} else {
+		/*
+		pr_info("insert element %u should have failed with %d, got %d\n",
+				ht.max_elems, -E2BIG, err);
+		*/
 		if (err == 0)
 			err = -1;
 	}
@@ -498,6 +660,7 @@ static unsigned int print_ht(struct rhltable *rhlt, struct ktf_test *self)
 			sprintf(buff, "%s]]%s", buff, !rht_is_a_nulls(pos) ? " -> " : "");
 		}
 	}
+	//printk(KERN_ERR "\n---- ht: ----%s\n-------------\n", buff);
 	mutex_unlock(&ht->mutex);
 
 	return cnt;
@@ -514,6 +677,10 @@ static int test_insert_dup(struct test_obj_rhl *rhl_test_objects,
 
 	err = rhltable_init(&rhlt, &test_rht_params_dup);
 	ASSERT_FALSE_RETVAL(err, err);
+	/*
+	if (WARN_ON(err))
+		return err;
+	*/
 
 	for (i = 0; i < cnt; i++) {
 		rhl_test_objects[i].value.tid = i;
@@ -523,6 +690,7 @@ static int test_insert_dup(struct test_obj_rhl *rhl_test_objects,
 		if (slow) {
 			err = PTR_ERR(rhashtable_insert_slow(&rhlt.ht, key,
 							     &rhl_test_objects[i].list_node.rhead));
+			//EXPECT_INT_NE(err, -EAGAIN);
 			if (err == -EAGAIN)
 				err = 0;
 		} else
@@ -530,10 +698,17 @@ static int test_insert_dup(struct test_obj_rhl *rhl_test_objects,
 					      &rhl_test_objects[i].list_node,
 					      test_rht_params_dup);
 		ASSERT_INT_EQ_GOTO(err, 0, skip_print);
+		/*
+		if (WARN(err, "error %d on element %d/%d (%s)\n", err, i, cnt, slow? "slow" : "fast"))
+			goto skip_print;
+		*/
 	}
 
 	ret = print_ht(&rhlt, self);
 	EXPECT_TRUE(ret == cnt);
+	/*
+	WARN(ret != cnt, "missing rhltable elements (%d != %d, %s)\n", ret, cnt, slow? "slow" : "fast");
+	*/
 
 skip_print:
 	rhltable_destroy(&rhlt);
@@ -544,6 +719,8 @@ skip_print:
 static int test_insert_duplicates_run(struct ktf_test *self)
 {
 	struct test_obj_rhl rhl_test_objects[3] = {};
+
+	//pr_info("test inserting duplicates\n");
 
 	/* two different values that map to same bucket */
 	rhl_test_objects[0].value.id = 1;
@@ -577,6 +754,19 @@ static int thread_lookup_test(struct thread_data *tdata, struct ktf_test *self)
 		ASSERT_FALSE_GOTO(obj && (tdata->objs[i].value.id == TEST_INSERT_FAIL), inc_err);
 		ASSERT_FALSE_GOTO(!obj && (tdata->objs[i].value.id != TEST_INSERT_FAIL), inc_err);
 		ASSERT_FALSE_GOTO(obj && memcmp(&obj->value, &key, sizeof(key)), inc_err);
+		/*
+		if (obj && (tdata->objs[i].value.id == TEST_INSERT_FAIL)) {
+			pr_err("  found unexpected object %d-%d\n", key.tid, key.id);
+			err++;
+		} else if (!obj && (tdata->objs[i].value.id != TEST_INSERT_FAIL)) {
+			pr_err("  object %d-%d not found!\n", key.tid, key.id);
+			err++;
+		} else if (obj && memcmp(&obj->value, &key, sizeof(key))) {
+			pr_err("  wrong object returned (got %d-%d, expected %d-%d)\n",
+			       obj->value.tid, obj->value.id, key.tid, key.id);
+			err++;
+		}
+		*/
 
 		cond_resched();
 
@@ -599,16 +789,40 @@ static int threadfunc(void *data)
 
 	up(&prestart_sem);
 	EXPECT_INT_EQ(down_interruptible(&startup_sem), 0);
-
+	/*
+	if (down_interruptible(&startup_sem))
+		pr_err("  thread[%d]: down_interruptible failed\n", tdata->id);
+	*/
 	for (i = 0; i < tdata->entries; i++) {
 		tdata->objs[i].value.id = i;
 		tdata->objs[i].value.tid = tdata->id;
 		err = insert_retry(&ht, &tdata->objs[i], test_rht_params, self);
 		EXPECT_INT_EQ(err, 0);
 		ASSERT_INT_GE_GOTO(err, 0, out);
+		/*
+		if (err > 0) {
+			insert_retries += err;
+		else if (err) {
+			pr_err("  thread[%d]: rhashtable_insert_fast failed\n",
+			       tdata->id);
+			goto out;
+		}*/
 	}
+	/*
+	if (insert_retries)
+		pr_info("  thread[%d]: %u insertions retried due to memory pressure\n",
+			tdata->id, insert_retries);
+	*/
 	err = thread_lookup_test(tdata, self);
 	ASSERT_INT_EQ_GOTO(err, 0, out);
+	/*
+	err = thread_lookup_test(tdata);
+	if (err) {
+		pr_err("  thread[%d]: rhashtable_lookup_test failed\n",
+		       tdata->id);
+		goto out;
+	}
+	*/
 	/*
 	 * This counter is added, as the kernel crashes if the loop below is
 	 * allowed to run for as long as it wishes!
@@ -625,13 +839,33 @@ static int threadfunc(void *data)
 			}
 
 			ASSERT_FALSE_CONT(tdata->objs[i].value.id == TEST_INSERT_FAIL);
+			/*
+			if (tdata->objs[i].value.id == TEST_INSERT_FAIL)
+				continue;
+			*/
 			ASSERT_INT_EQ_GOTO((err = rhashtable_remove_fast(&ht, &tdata->objs[i].node,
 			                             test_rht_params)), 0, out);
+			/*
+			err = rhashtable_remove_fast(&ht, &tdata->objs[i].node,
+			                             test_rht_params);
+			if (err) {
+				pr_err("  thread[%d]: rhashtable_remove_fast failed\n",
+				       tdata->id);
+				goto out;
+			}
+			*/
 			tdata->objs[i].value.id = TEST_INSERT_FAIL;
 
 			cond_resched();
 		}
 		ASSERT_INT_EQ_GOTO(thread_lookup_test(tdata, self), 0, out);
+		/*
+		err = thread_lookup_test(tdata);
+		if (err) {
+			pr_err("  thread[%d]: rhashtable_lookup_test (2) failed\n",
+			       tdata->id);
+			goto out;
+		}*/
 	}
 out:
 	while (!kthread_should_stop()) {
@@ -641,6 +875,9 @@ out:
 	return err;
 }
 
+/*
+static int __init test_rht_init(void)
+*/
 TEST(test_rht, test_rht_init2)
 {
 	unsigned int entries;
@@ -661,42 +898,78 @@ TEST(test_rht, test_rht_init2)
 	objs = vzalloc(array_size(sizeof(struct test_obj),
 				  test_rht_params.max_size + 1));
     ASSERT_TRUE(objs != NULL);
+    /*
+        Bytte ut med statementen over?
+	if (!objs)
+		return -ENOMEM;
+    */
+
+    /*
+        Fjernes!
+	pr_info("Running rhashtable test nelem=%d, max_size=%d, shrinking=%d\n",
+		size, max_size, shrinking);
+    */
 
 	for (i = 0; i < runs; i++) {
 		s64 time;
 
+		//pr_info("Test %02d:\n", i);
 		memset(objs, 0, test_rht_params.max_size * sizeof(struct test_obj));
 
 		err = rhashtable_init(&ht, &test_rht_params);
         ASSERT_FALSE_CONT(err < 0);
+        /*
+		if (err < 0) {
+			pr_warn("Test failed: Unable to initialize hashtable: %d\n",
+				err);
+			continue;
+		}
+        */
 
 		time = test_rhashtable(&ht, objs, entries, self);
 		rhashtable_destroy(&ht);
-
+        ASSERT_FALSE(time < 0);
+        /*
 		if (time < 0) {
 			vfree(objs);
-			ASSERT_FALSE(time < 0);
+			pr_warn("Test failed: return code %lld\n", time);
+			return -EINVAL;
 		}
+        */
 
 		total_time += time;
 	}
 
 	EXPECT_INT_EQ(test_rhashtable_max(objs, entries, self), 0);
+    /*
+	pr_info("test if its possible to exceed max_size %d: %s\n",
+			test_rht_params.max_size, test_rhashtable_max(objs, entries) == 0 ?
+			"no, ok" : "YES, failed");*/
 	vfree(objs);
 
 	do_div(total_time, runs);
+	/*pr_info("Average test time: %llu\n", total_time);*/
 
 	test_insert_duplicates_run(self);
 
     ASSERT_TRUE(tcount);
+    /*
+	if (!tcount)
+		return 0;
 
+	pr_info("Testing concurrent rhashtable access from %d threads\n",
+	        tcount);
+    */
 	sema_init(&prestart_sem, 1 - tcount);
 	tdata = vzalloc(array_size(tcount, sizeof(struct thread_data)));
 	ASSERT_TRUE(tdata != NULL);
-
+	/*ASSERT_TRUE_RETVAL(tdata, -ENOMEM);*/
+    /*
+	if (!tdata)
+		return -ENOMEM;
+    */
 	objs  = vzalloc(array3_size(sizeof(struct test_obj), tcount, entries));
-	
-	/* Not an ideal solution, but it works... */
+	/* Er dette virkelig en ønskelig løsning?? Rotete! */
     ASSERT_TRUE_GOTO((objs != NULL), _objs_null);
     /*
     if (!objs) {
@@ -708,8 +981,10 @@ TEST(test_rht, test_rht_init2)
 	test_rht_params.max_size = max_size ? :
 	                           roundup_pow_of_two(tcount * entries);
 	err = rhashtable_init(&ht, &test_rht_params);
+    /* Hva bør gjøres her?? */
 	if (err < 0) {
-		EXPECT_INT_GE(err, 0);
+		/*pr_warn("Test failed: Unable to initialize hashtable: %d\n",
+			err);*/
 		vfree(tdata);
 		vfree(objs);
 		return;
@@ -723,15 +998,35 @@ TEST(test_rht, test_rht_init2)
 
 		ASSERT_FALSE_CONT(IS_ERR(tdata[i].task));
 		started_threads++;
+		/*
+		if (IS_ERR(tdata[i].task))
+			pr_err(" kthread_run failed for thread %d\n", i);
+		else
+			started_threads++;
+		*/
 	}
-	if (down_interruptible(&prestart_sem))
-		EXPECT_TRUE(0);
+	/* Iftest med sideeffekter?? */
+	/*if (down_interruptible(&prestart_sem))
+		pr_err("  down interruptible failed\n");*/
 	for (i = 0; i < tcount; i++)
 		up(&startup_sem);
 	for (i = 0; i < tcount; i++) {
 		ASSERT_FALSE_CONT(IS_ERR(tdata[i].task));
+		/*
+			Regner med at dette går som en assertion?
+		if (IS_ERR(tdata[i].task))
+			continue;
+		*/
 		err = kthread_stop(tdata[i].task);
+		/*EXPECT_FALSE(err);*/
 		EXPECT_INT_EQ(err, 0);
+		/*
+		if ((err = kthread_stop(tdata[i].task))) {
+			pr_warn("Test failed: thread %d returned: %d\n",
+			        i, err);
+				Denne teller bare feil, trengs ikke med KTF!
+			failed_threads++;
+		}*/
 	}
 	rhashtable_destroy(&ht);
 	vfree(tdata);
@@ -742,6 +1037,9 @@ TEST(test_rht, test_rht_init2)
 	 * to run for 2 minutes or more,  use a smaller number instead.
 	 */
 	err = test_rhltable(entries / 16, self);
+	/*pr_info("Started %d threads, %d failed, rhltable test returns %d\n",
+	        started_threads, failed_threads, err);*/
+	printk("Finished executing 'test_rht_init'!\n");
 	return;
 _objs_null:
     vfree(tdata);
@@ -751,18 +1049,23 @@ static int test_rht_init(void) {
 	KTF_CONTEXT_ADD(&tsp.k, "thread_self");
 
 	ADD_TEST(test_rht_init2);
+	printk("Added TEST!\n");
 
 	return 0;
 }
 
 static void __exit test_rht_exit(void)
 {
+	/* KTF exit kode */
 	struct ktf_context *tctx = KTF_CONTEXT_FIND("thread_self");
 	if (tctx) {
     	KTF_CONTEXT_REMOVE(tctx);
 	}
+	printk("Removing context 'thread_self'...\n");
 
 	KTF_CLEANUP();
+	printk("KTF_CLEANUP Done! Exiting...\n");
+	/* ----- */
 }
 
 module_init(test_rht_init);
