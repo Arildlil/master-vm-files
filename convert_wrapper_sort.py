@@ -1,4 +1,4 @@
-from convert import CurrentState
+from convert import Converter
 
 source_directory = "/home/ubuntu/src/test_sort_rewrite/kernel/"
 source_file_name = "test_sort_backup.c"
@@ -42,7 +42,7 @@ test_sort_rules_2 = {
     "should_add_new_main": True
 }
 
-state = CurrentState(data, full_target_path, test_sort_rules_2, True)
+state = Converter(data, full_target_path, test_sort_rules_2, True)
 state.add_include_code() \
     .add_init_code_to_main() \
     .add_exit_code() \

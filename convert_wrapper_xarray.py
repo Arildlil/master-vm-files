@@ -1,4 +1,4 @@
-from convert import CurrentState
+from convert import Converter
 
 source_directory = "/home/ubuntu/src/test_xarray_rewrite/kernel/"
 source_file_name = "test_xarray_rewrite_old.c"
@@ -86,7 +86,7 @@ r"""\g<1>
     "should_add_new_main": False
 }
 
-state = CurrentState(data, full_target_path, test_xarray_rules, False)
+state = Converter(data, full_target_path, test_xarray_rules, False)
 state.add_include_code() \
     .add_init_code_to_main() \
     .add_exit_code() \

@@ -28,7 +28,7 @@ def printr(matches):
     return matches.group(1)
 
 
-class CurrentState(object):
+class Converter(object):
     """
     Class used to store and handle parameters from the user,
     as well as information about the file in question. For example,
