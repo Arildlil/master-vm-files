@@ -10,7 +10,7 @@ KTF_INIT();
 
 #define TEST_LEN 1000
 
-static int __init cmpint(const void *a, const void *b)
+static int cmpint(const void *a, const void *b)
 {
 	return *(int *)a - *(int *)b;
 }

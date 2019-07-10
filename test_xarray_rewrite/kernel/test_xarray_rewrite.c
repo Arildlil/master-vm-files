@@ -7,7 +7,7 @@
 
 #include <linux/xarray.h>
 #include <linux/module.h>
-#include "ktf.h"
+#include "ktf.h" 
 
 struct array_context {
     struct ktf_context k;
@@ -77,7 +77,7 @@ static void *xa_store_order(struct ktf_test *self, struct xarray *xa, unsigned l
 TEST(test_xarray_rewrite, check_xa_err) {
         struct array_context *actx = KTF_CONTEXT_GET("array", struct array_context);
         struct xarray *xa = actx->xa;
-
+    
 
 	EXPECT_FALSE(xa_err(xa_store_index(self, xa, 0, GFP_NOWAIT)) != 0);
 	EXPECT_FALSE(xa_err(xa_erase(xa, 0)) != 0);
@@ -96,7 +96,7 @@ TEST(test_xarray_rewrite, check_xa_err) {
 TEST(test_xarray_rewrite, check_xas_retry) {
         struct array_context *actx = KTF_CONTEXT_GET("array", struct array_context);
         struct xarray *xa = actx->xa;
-
+    
 
 	XA_STATE(xas, xa, 0);
 	void *entry;
@@ -141,7 +141,7 @@ TEST(test_xarray_rewrite, check_xas_retry) {
 TEST(test_xarray_rewrite, check_xa_load) {
         struct array_context *actx = KTF_CONTEXT_GET("array", struct array_context);
         struct xarray *xa = actx->xa;
-
+    
 
 	unsigned long i, j;
 
@@ -285,7 +285,7 @@ static noinline void check_xa_mark_2(struct ktf_test *self, struct xarray *xa)
 TEST(test_xarray_rewrite, check_xa_mark) {
         struct array_context *actx = KTF_CONTEXT_GET("array", struct array_context);
         struct xarray *xa = actx->xa;
-
+    
 
 	unsigned long index;
 
@@ -298,7 +298,7 @@ TEST(test_xarray_rewrite, check_xa_mark) {
 TEST(test_xarray_rewrite, check_xa_shrink) {
         struct array_context *actx = KTF_CONTEXT_GET("array", struct array_context);
         struct xarray *xa = actx->xa;
-
+    
 
 	XA_STATE(xas, xa, 1);
 	struct xa_node *node;
@@ -350,7 +350,7 @@ TEST(test_xarray_rewrite, check_xa_shrink) {
 TEST(test_xarray_rewrite, check_cmpxchg) {
         struct array_context *actx = KTF_CONTEXT_GET("array", struct array_context);
         struct xarray *xa = actx->xa;
-
+    
 
 	void *FIVE = xa_mk_value(5);
 	void *SIX = xa_mk_value(6);
@@ -372,7 +372,7 @@ TEST(test_xarray_rewrite, check_cmpxchg) {
 TEST(test_xarray_rewrite, check_reserve) {
         struct array_context *actx = KTF_CONTEXT_GET("array", struct array_context);
         struct xarray *xa = actx->xa;
-
+    
 
 	void *entry;
 	unsigned long index = 0;
@@ -414,7 +414,7 @@ TEST(test_xarray_rewrite, check_reserve) {
 TEST(test_xarray_rewrite, check_xas_erase) {
         struct array_context *actx = KTF_CONTEXT_GET("array", struct array_context);
         struct xarray *xa = actx->xa;
-
+    
 
 	XA_STATE(xas, xa, 0);
 	void *entry;
@@ -492,7 +492,7 @@ static noinline void check_multi_store_2(struct ktf_test *self, struct xarray *x
 TEST(test_xarray_rewrite, check_multi_store) {
         struct array_context *actx = KTF_CONTEXT_GET("array", struct array_context);
         struct xarray *xa = actx->xa;
-
+    
 
 #ifdef CONFIG_XARRAY_MULTI
 	unsigned long i, j, k;
@@ -572,7 +572,7 @@ static DEFINE_XARRAY_ALLOC(xa0);
 TEST(test_xarray_rewrite, check_xa_alloc) {
         struct array_context *actx = KTF_CONTEXT_GET("array", struct array_context);
         struct xarray *xa = actx->xa;
-
+    
 
 	int i;
 	u32 id;
@@ -653,7 +653,7 @@ retry:
 TEST(test_xarray_rewrite, check_store_iter) {
         struct array_context *actx = KTF_CONTEXT_GET("array", struct array_context);
         struct xarray *xa = actx->xa;
-
+    
 
 	unsigned int i, j;
 	unsigned int max_order = IS_ENABLED(CONFIG_XARRAY_MULTI) ? 20 : 1;
@@ -744,7 +744,7 @@ static noinline void check_multi_find_2(struct ktf_test *self, struct xarray *xa
 TEST(test_xarray_rewrite, check_find) {
         struct array_context *actx = KTF_CONTEXT_GET("array", struct array_context);
         struct xarray *xa = actx->xa;
-
+    
 
 	unsigned long i, j, k;
 
@@ -820,7 +820,7 @@ static noinline unsigned long xa_find_entry(struct ktf_test *self, struct xarray
 TEST(test_xarray_rewrite, check_find_entry) {
         struct array_context *actx = KTF_CONTEXT_GET("array", struct array_context);
         struct xarray *xa = actx->xa;
-
+    
 
 #ifdef CONFIG_XARRAY_MULTI
 	unsigned int order;
@@ -903,7 +903,7 @@ static noinline void check_move_small(struct ktf_test *self, struct xarray *xa, 
 TEST(test_xarray_rewrite, check_move) {
         struct array_context *actx = KTF_CONTEXT_GET("array", struct array_context);
         struct xarray *xa = actx->xa;
-
+    
 
 	XA_STATE(xas, xa, (1 << 16) - 1);
 	unsigned long i;
@@ -1020,7 +1020,7 @@ static noinline void check_create_range_3(struct ktf_test *self)
 	XA_STATE(xas, NULL, 0);
 	xas_set_err(&xas, -EEXIST);
 	xas_create_range(&xas);
-	//XA_BUG_ON(NULL, xas_error(&xas) != -EEXIST);
+	XA_BUG_ON(NULL, xas_error(&xas) != -EEXIST);
 }
 
 static noinline void check_create_range_4(struct ktf_test *self, struct xarray *xa,
@@ -1058,7 +1058,7 @@ unlock:
 TEST(test_xarray_rewrite, check_create_range) {
         struct array_context *actx = KTF_CONTEXT_GET("array", struct array_context);
         struct xarray *xa = actx->xa;
-
+    
 
 	unsigned int order;
 	unsigned int max_order = IS_ENABLED(CONFIG_XARRAY_MULTI) ? 12 : 1;
@@ -1110,7 +1110,7 @@ static noinline void __check_store_range(struct ktf_test *self, struct xarray *x
 TEST(test_xarray_rewrite, check_store_range) {
         struct array_context *actx = KTF_CONTEXT_GET("array", struct array_context);
         struct xarray *xa = actx->xa;
-
+    
 
 	unsigned long i, j;
 
@@ -1194,7 +1194,7 @@ static noinline void check_workingset(struct ktf_test *self, struct xarray *xa, 
 TEST(test_xarray_rewrite, check_account) {
         struct array_context *actx = KTF_CONTEXT_GET("array", struct array_context);
         struct xarray *xa = actx->xa;
-
+    
 
 #ifdef CONFIG_XARRAY_MULTI
 	unsigned int order;
@@ -1224,7 +1224,7 @@ TEST(test_xarray_rewrite, check_account) {
 TEST(test_xarray_rewrite, check_destroy) {
         struct array_context *actx = KTF_CONTEXT_GET("array", struct array_context);
         struct xarray *xa = actx->xa;
-
+    
 
 	unsigned long index;
 
@@ -1266,21 +1266,21 @@ KTF_INIT();
 TEST(test_xarray_rewrite, check_workingset_1_) {
         struct array_context *actx = KTF_CONTEXT_GET("array", struct array_context);
         struct xarray *xa = actx->xa;
-
+    
 	check_workingset(self, xa, 0);
 }
 
 TEST(test_xarray_rewrite, check_workingset_2_) {
         struct array_context *actx = KTF_CONTEXT_GET("array", struct array_context);
         struct xarray *xa = actx->xa;
-
+    
 	check_workingset(self, xa, 64);
 }
 
 TEST(test_xarray_rewrite, check_workingset_3_) {
         struct array_context *actx = KTF_CONTEXT_GET("array", struct array_context);
         struct xarray *xa = actx->xa;
-
+    
 	check_workingset(self, xa, 4096);
 }
 
@@ -1311,15 +1311,16 @@ static int xarray_checks(void)
 	ADD_TEST(check_workingset_2_);
 	ADD_TEST(check_workingset_3_);
 
-    return 0;
+	printk("XArray: %u of %u tests passed\n", tests_passed, tests_run);
+	return (tests_run == tests_passed) ? 0 : -EINVAL;
 }
 
 static void xarray_exit(void)
 {
-    struct ktf_context *pctx = KTF_CONTEXT_FIND("array");
-    KTF_CONTEXT_REMOVE(pctx);
+struct ktf_context *pctx = KTF_CONTEXT_FIND("data");
+KTF_CONTEXT_REMOVE(pctx);
 
-    KTF_CLEANUP();
+KTF_CLEANUP();
 
 }
 
