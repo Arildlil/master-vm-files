@@ -165,8 +165,6 @@ class Converter(object):
             'statics_with_context_and_extra_args': "((static *(noinline)*? *([a-z_*0-9 ]+?) *([a-zA-Z_0-9]*)\()({ctx_args})(.*)(\))\s*{{)",
             'test_macro_function': "(TEST(.*?), *(.*?) *{)",
             'function_calls_common_args': "(([a-zA-Z0-9_]*)\(({common_args})*\);)",
-            #'function_calls_all_args': "(([\w_]+)(\()(.*)(\)))([,; \s)])(?!{)",
-            #'function_calls_all_args': "((([\w_]+)(\()(.*))(\)[,; \s)](?!{)))",
             # We exploit the fact that this should be used AFTER the KTF specific
             # arguments have been added.
             'function_calls_with_args': "(((\w)+)(\()((?!struct)(?!\))))",
@@ -276,13 +274,6 @@ class Converter(object):
         for match in re.finditer(reg, self._text):
             func_name = match.group(5)
             self._local_function_names[func_name] = True
-            """
-            pprint("(_reg) Added func " + func_name)
-            if func_name in self._test_function_names:
-                self._test_prefix_numbers[func_name] = str(self._test_prefix_numbers["counter"]) + "_" + func_name
-                self._test_prefix_numbers["counter"] += 1
-                pprint("\t(def repl) Added " + self._test_prefix_numbers[func_name])
-            """
         
         self.dprintwl("self._local_function_names:", self._local_function_names)
 
@@ -327,17 +318,9 @@ class Converter(object):
         """
         test_name = matches.group(2)
         if test_name in self._test_function_names:
-            """
-            name_with_prefix = self._test_prefix_numbers[test_name]
-            pprint("\t(call repl) Fetched " + self._test_prefix_numbers[test_name])
-            return self._add_test_call.format(func_name=name_with_prefix) 
-            """
             return self._add_test_call.format(func_name=test_name)
-            #(func_name=test_name)
         else:
             return matches.group(1)
-
-        #self._dummy_function_internal_call = "{func_name}({alt_args}, {rest_args});" # common_call_multi_arg_replace
 
 
     def _replace_if_valid_multi_arg_test_function(self, matches):
@@ -362,14 +345,6 @@ class Converter(object):
                 call=modified_call)
             add_test_call = self._add_test_call.format(func_name=dummy_func_name)
 
-            #print("(1 m.arg) dummy_func_name: " + dummy_func_name)
-            """
-            print("\tdummy_func_name: " + dummy_func_name)
-            print("\t\told call: " + str(matches.groups()))
-            print("\tinternal call: " + modified_call)
-            print("\tADD_TEST call: " + add_test_call)
-            print("\tdummy func body: " + dummy_func_body)
-            """
             self._dummy_function_counter += 1
 
             # Add dummy functions to a list of tuples that will be added to the
@@ -406,8 +381,6 @@ class Converter(object):
             optional_comma = ""
             old_args = ""
         if self._is_helper_or_multi_arg_test_function(test_name):
-            #pprint("Modded (1): " + str(matches.group(1)))
-            #pprint("(2 v.def): " + str(matches.group(1)))
             return self._extra_parameters_result.format(
                 sig=function_signature, ext_params=self._extra_parameters, 
                 opt_comma=optional_comma, args=old_args, end=rest)
@@ -422,14 +395,11 @@ class Converter(object):
         """
         func_name = matches.group(2)
         if self._is_helper_or_multi_arg_test_function(func_name):
-            #pprint("(3 v.call): " + str(func_name))
-            #self._extra_ktf_args_calls = "{func_name}({new_args}{old_arg_char}"
             extra_params = self._extra_parameters_calls_comma
             
             new_call = self._extra_ktf_args_calls.format(
                 func_name=func_name, new_args=extra_params,
                 old_arg_char="") 
-            #pprint("    new_call: " + new_call)
             return new_call
         else:
             return matches.group(1)
@@ -441,7 +411,6 @@ class Converter(object):
         """
         func_name = matches.group(2)
         if self._is_helper_or_multi_arg_test_function(func_name):
-            #pprint("(4 v.call): " + str(func_name))
             extra_params = self._extra_parameters_calls
 
             new_call = self._extra_ktf_args_calls_no_args.format(
@@ -456,14 +425,10 @@ class Converter(object):
         list of tuples to the corresponding right KTF assertion.
         """
         func_name_with_left_par = matches.group(1)
-        #[pprint(item[1]) for item in self._assertion_replacements if item[0]+"(" == func_name_with_left_par]
         for item in self._assertion_replacements:
             if item[0]+"(" == func_name_with_left_par:
                 return item[1]+"("
         return matches.group(1)
-
-        #[pprint(item) for item in self._assertion_replacements if item[0] == func_name_with_left_par]
-        #print("\t" + str(matches.group(1)))
 
     def _sub(self, reg, result):
         """
@@ -617,15 +582,3 @@ class Converter(object):
         """
         with open(self._outfile_name, 'w') as f:
             f.write(self._text)
-
-
-
-def out(output):
-    """
-    Writes the output to either stdout or a file.
-    """
-    print(output)
-    if args.out:
-        with open(args.out, 'w') as f:
-            f.write(output)
-        print("convert.py: Wrote output to", args.out)
