@@ -4,15 +4,10 @@ from collections import namedtuple
 from string import whitespace
 
 
-"""
-ConversionRules = namedtuple('ConversionRules', 
-    'test_funcs init exit include new_types boilerplate suite_name ctx_args_def \
-    cmn_test_args_call extra_dummy_args_call blacklist replacements')
-"""
 
 # Argsparse related code
 # -------------------------------------------------------------------
-
+"""
 default_filename = "/home/ubuntu/src/test_xarray_rewrite/kernel/test_xarray_rewrite.c"
 
 parser = argparse.ArgumentParser(
@@ -24,104 +19,7 @@ args = parser.parse_args()
 with open(args.file, 'r') as f:
     data = f.read()
 
-
-# Code local for one specific test file. This could be supplied in
-# other ways, but currently it will be written here.
-# -------------------------------------------------------------------
-
-# |----------------------------------------------|
-# | Conversion rules for "test_xarray_rewrite.c" |
-# |----------------------------------------------|
-
-test_xarray_rules = {
-    "test_funcs":
-    """
-    check_xa_err 
-    check_xas_retry
-	check_xa_load
-	check_xa_mark 
-    check_xa_shrink 
-	check_xas_erase 
-	check_cmpxchg 
-	check_reserve 
-	check_multi_store 
-	check_xa_alloc 
-	check_find 
-	check_find_entry 
-	check_account 
-	check_destroy 
-	check_move 
-	check_create_range 
-	check_store_range 
-	check_store_iter
-	check_workingset
-    """,
-    "init": 
-r"""static struct array_context cxa = { .xa = &array };
-
-KTF_INIT();
-
-\g<1>
-    \tKTF_CONTEXT_ADD(&cxa.k, "array");
-""", 
-    "exit":
-r"""\g<1>
-    struct ktf_context *pctx = KTF_CONTEXT_FIND("data");
-    KTF_CONTEXT_REMOVE(pctx);
-        
-    KTF_CLEANUP();
-""",
-    "include": r"""\g<1>
-#include "ktf.h" 
-
-""",
-    "new_types": r"""\g<1>
-
-struct array_context {
-    struct ktf_context k;
-    struct xarray *xa;
-};
-
-""",
-    "boilerplate": 
-r"""\g<1>
-        struct array_context *actx = KTF_CONTEXT_GET("array", struct array_context);
-        struct xarray *xa = actx->xa;
-    """,
-    "suite_name": "test_xarray_rewrite",
-    "ctx_args_def": "struct xarray [*]xa|void",
-    "cmn_test_args_call": "&array",
-    "extra_dummy_args_call": "xa",
-    "blacklist": ["test_update_node", "xa_load", "xa_alloc", "xas_retry", "xa_err"],
-    "replacements": [
-        (r"(^\s*)(XA_BUG_ON[(]xa, *)", "\g<1>EXPECT_FALSE("),
-        (r"(^\s*)(XA_BUG_ON[(]&xa0, *)", "\g<1>EXPECT_FALSE(")
-    ],
-    "should_add_new_main": False
-}
-
-
-
-# |----------------------------------------------|
-# | Conversion rules for "test_sort_rewrite.c" |
-# |----------------------------------------------|
-
-test_sort_rules = {
-    "test_funcs":
-    """
-    test_sort_init
-    """,
-    "suite_name": "test_sort_rewrite",
-    "blacklist": ["cmpint"],
-    "replacements": [
-        (
-r"""if (!a)
-		return err;""", "ASSERT_INT_NE(a,0);")
-    ]
-}
-
-
-
+"""
 
 def printr(matches):
     print("\n\t" + matches.group(1))
@@ -130,13 +28,6 @@ def printr(matches):
     return matches.group(1)
 
 
-
-    """
-    def __init__(self, text, test_func_names="", outfile_name, test_suite_name="", 
-        ignore_func_names="", init_code="", exit_code="", include_code="", type_def_code="",
-        boilerplate_test_code="", ctx_args="", common_call_args="",
-        common_call_multi_arg_replace="", assertion_replacements="", add_new_main=False, debug=True):
-    """
 class CurrentState(object):
     """
     Class used to store and handle parameters from the user,
@@ -724,64 +615,10 @@ class CurrentState(object):
         """
         Prints the result to the earlier specified output stream.
         """
-        with open(args.out, 'w') as f:
+        with open(self._outfile_name, 'w') as f:
             f.write(self._text)
 
 
-# def __init(self, text, outfile_name, rules, debug=False):
-
-
-"""
-state = CurrentState(data, args.testfuncs, args.out, test_suite_name, \
-    ignore_func_names, init_code, exit_code, include_code, type_def_code, \
-    boilerplate_test_code, context_args, common_call_args, \
-    common_call_multi_arg_replace, assertion_replacements, debug=False)
-    """
-
-print(args.file)
-if args.file.endswith("test_xarray_rewrite.c"):
-    state = CurrentState(data, args.out, test_xarray_rules, False)
-    print("Converting " + args.file)
-    state.add_include_code() \
-    .add_init_code_to_main() \
-    .add_exit_code() \
-    .add_type_definitions() \
-    .convert_to_test_common_args() \
-    .convert_to_test_extra_args() \
-    .convert_calls_to_add_test() \
-    .add_boilerplate_test_code() \
-    .add_extra_parameters_to_helpers_and_multi_arg_defs() \
-    .add_self_argument_to_helper_calls() \
-    .convert_assertions() \
-    .result()
-
-test_sort_rules_2 = {
-    "test_funcs":
-    """
-    test_sort_init
-    """,
-    "blacklist": ["cmpint"],
-    "should_add_new_main": True
-}
-
-print(args.file)
-if args.file.endswith("test_sort_rewrite.c"):
-    state = CurrentState(data, args.out, test_sort_rules_2, True)
-    print("Converting " + args.file)
-    state.add_include_code() \
-    .add_init_code_to_main() \
-    .add_exit_code() \
-    .convert_to_test_common_args() \
-    .result()
-    #.convert_to_test_common_args() \
-    #.convert_calls_to_add_test() \
-    #.convert_assertions() \
-    #.result()
-
-
-
-print(state._regexes['statics_with_context_args'].format(
-                ctx_args=state._context_args))
 
 def out(output):
     """

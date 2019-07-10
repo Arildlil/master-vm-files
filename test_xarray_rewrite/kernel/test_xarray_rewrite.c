@@ -1317,10 +1317,10 @@ static int xarray_checks(void)
 
 static void xarray_exit(void)
 {
-struct ktf_context *pctx = KTF_CONTEXT_FIND("data");
-KTF_CONTEXT_REMOVE(pctx);
+    struct ktf_context *pctx = KTF_CONTEXT_FIND("data");
+    KTF_CONTEXT_REMOVE(pctx);
 
-KTF_CLEANUP();
+    KTF_CLEANUP();
 
 }
 
