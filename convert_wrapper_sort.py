@@ -24,8 +24,11 @@ test_sort_rules = {
     """
     test_sort_init
     """,
+    
     "suite_name": "test_sort_rewrite",
+    
     "blacklist": ["cmpint"],
+    
     "replacements": [
         (
 r"""if (!a)
@@ -38,7 +41,9 @@ test_sort_rules_2 = {
     """
     test_sort_init
     """,
+    
     "blacklist": ["cmpint"],
+    
     "should_add_new_main": True
 }
 

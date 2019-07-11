@@ -42,6 +42,7 @@ test_xarray_rules = {
 	check_store_iter
 	check_workingset
     """,
+
     "init": 
 r"""static struct array_context cxa = { .xa = &array };
 
@@ -49,18 +50,20 @@ KTF_INIT();
 
 \g<1>
     \tKTF_CONTEXT_ADD(&cxa.k, "array");
-""", 
+""",
+
     "exit":
 r"""\g<1>
-    struct ktf_context *pctx = KTF_CONTEXT_FIND("data");
+    struct ktf_context *pctx = KTF_CONTEXT_FIND("array");
     KTF_CONTEXT_REMOVE(pctx);
 
-    KTF_CLEANUP();
-""",
+    KTF_CLEANUP();""",
+
     "include": r"""\g<1>
 #include "ktf.h" 
 
 """,
+
     "new_types": r"""\g<1>
 
 struct array_context {
@@ -69,22 +72,33 @@ struct array_context {
 };
 
 """,
+
     "boilerplate": 
 r"""\g<1>
         struct array_context *actx = KTF_CONTEXT_GET("array", struct array_context);
         struct xarray *xa = actx->xa;
-    """,
+""",
+
     "suite_name": "test_xarray_rewrite",
+
     "ctx_args_def": "struct xarray [*]xa|void",
+
     "cmn_test_args_call": "&array",
+
     "extra_dummy_args_call": "xa",
+
     "blacklist": ["test_update_node", "xa_load", "xa_alloc", "xas_retry", "xa_err"],
+
     "replacements": [
         (r"(^\s*)(XA_BUG_ON[(]xa, *)", "\g<1>EXPECT_FALSE("),
         (r"(^\s*)(XA_BUG_ON[(]&xa0, *)", "\g<1>EXPECT_FALSE(")
     ],
+
     "should_add_new_main": False
 }
+
+#,
+        #(r"(^\s*)(XA_BUG_ON[(]NULL, *)", "\g<1>EXPECT_FALSE(")
 
 state = Converter(data, full_target_path, test_xarray_rules, False)
 state.add_include_code() \
