@@ -91,14 +91,12 @@ r"""\g<1>
 
     "replacements": [
         (r"(^\s*)(XA_BUG_ON[(]xa, *)", "\g<1>EXPECT_FALSE("),
-        (r"(^\s*)(XA_BUG_ON[(]&xa0, *)", "\g<1>EXPECT_FALSE(")
+        (r"(^\s*)(XA_BUG_ON[(]&xa0, *)", "\g<1>EXPECT_FALSE("),
+        (r"(^\s*)(XA_BUG_ON[(]NULL, *)", "\g<1>EXPECT_FALSE(")
     ],
 
     "should_add_new_main": False
 }
-
-#,
-        #(r"(^\s*)(XA_BUG_ON[(]NULL, *)", "\g<1>EXPECT_FALSE(")
 
 state = Converter(data, full_target_path, test_xarray_rules, False)
 state.add_include_code() \
