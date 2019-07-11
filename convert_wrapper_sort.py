@@ -20,12 +20,12 @@ with open(full_source_path, 'r') as f:
 # |----------------------------------------------|
 
 test_sort_rules = {
-    "test_funcs":
+    "test_functions":
     """
     test_sort_init
     """,
     
-    "suite_name": "test_sort_rewrite",
+    "test_suite_name": "test_sort_rewrite",
     
     "blacklist": ["cmpint"],
     
@@ -37,12 +37,16 @@ r"""if (!a)
 }
 
 test_sort_rules_2 = {
-    "test_funcs":
+    "test_functions":
     """
     test_sort_init
     """,
     
     "blacklist": ["cmpint"],
+
+    "replacements": [
+        ("return err;", "ASSERT_INT_NE(err, 0);")
+    ],
     
     "should_add_new_main": True
 }
@@ -52,6 +56,7 @@ state.add_include_code() \
     .add_init_code_to_main() \
     .add_exit_code() \
     .convert_to_test_common_args() \
+    .use_replacements() \
     .result()
     #.convert_to_test_common_args() \
     #.convert_calls_to_add_test() \

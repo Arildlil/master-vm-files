@@ -5,42 +5,138 @@ from string import whitespace
 
 
 
-# Argsparse related code
-# -------------------------------------------------------------------
-"""
-default_filename = "/home/ubuntu/src/test_xarray_rewrite/kernel/test_xarray_rewrite.c"
-
-parser = argparse.ArgumentParser(
-    description='A python script hand crafted for converting "test_xarray.c" to KTF.')
-parser.add_argument('-f', '--file', action='store', default=default_filename)
-parser.add_argument('-o', '--out', action='store')
-args = parser.parse_args()
-
-with open(args.file, 'r') as f:
-    data = f.read()
-
-"""
-
-def printr(matches):
-    print("\n\t" + matches.group(1))
-    for match in matches.groups()[1:]:
-        print("\t\t" + str(match))
-    return matches.group(1)
-
-
 class Converter(object):
     """
-    Class used to store and handle parameters from the user,
-    as well as information about the file in question. For example,
-    instead of repeatedly using a regex to find all locally defined
-    functions, this can be done once and stored here for future use.
+    The class takes the name of an input file, an output file and a dictionary 
+    of data. This keys in the dictionary should be the names of the desired 
+    transformations; the values are the associated data (often code, regular 
+    expressions or the names of either functions or parameters). 
+    
+    First, the contents of the input file is read and stored internally as a 
+    string. Secondly, the string is modified using a combination of format 
+    strings, data from the dictionary parameter, and regular expressions; the 
+    goal is to partly or completely adapt the input file to the Kernel Test 
+    Framework. Finally, the contents of this transformation is written to the 
+    specified output file.
 
-    The most important fields to specify, for the 'rules' dict argument,
-    is the following:
-        ["test_funcs"], # Names of the test functions to convert to the TEST macro.
-        ["blacklist"]   # Names of functions that should NOT be converted to the TEST macro.
-    The class will add some KTF related code, even if an empty dict is passed
-    as the 'rules' argument, although little code will be added in that case.
+    The most important fields to fill in the dictionary are:
+        ["test_functions"] : string
+        ->  A string containing the names of test functions to redefine with 
+            the TEST macro. No functions will be redefined if this field is 
+            left out.
+
+        ["blacklist"] : string
+        ->  Names of functions that should NOT be redefined with the TEST 
+            macro. This is mainly intended for helper functions or functions 
+            with unique parameter lists. Can be skipped if ["test_functions"] 
+            is skipped or if every function in the file should be redefined 
+            with TEST.
+
+    Other supported fields (they are all optional):
+        ["should_add_new_main"] : boolean
+        ->  Set this field to True if the test file needs a new main function. 
+            One use case for this is if the test file only contains one 
+            function. This function must then be redefined with TEST for KTF to 
+            work, thus requiring a new one to be added. 
+        ->  Skip this field unless a new main function is needed.
+
+        ["init_code"] : string (has default value)
+        ->  Initialization code to be added to the main function and/or just 
+            above it. This field has a default value and can be skipped unless 
+            additional setup code is required. Should contain the substring 
+            "\g<1>" where the signature of the main function should be placed. 
+            One use case is if contexts or fixtures need to be setup. In that 
+            case the value of the "self._default_init_code" field in the class 
+            should be used as a baseline, with any new code appended to the end 
+            of it. See the "convert_wrapper_xarray.py" file for an example.
+        -> Skip this field unless custom setup code is needed.
+        
+        ["exit_code"] : string (has default value)
+        ->  Cleanup code to be added to the exit function and/or just above it.
+            Functions the same way as the ["init_code"] field.
+        ->  Skip this field unless custom cleanup code is needed.
+
+        ["include_code"] : string (used in regex) (has default value)
+        ->  Include code to be added to the top of the file. Should begin with 
+            the substring "\g<1>". This field should generally be skipped. 
+            NOTE: It's assumed that the input file contains at least one 
+            other include statement! Otherwise, this won't work!
+        ->  Skip this field unless additional headers are needed.
+
+        ["new_types"] : string (used in regex)
+        ->  Used for defining new types near the top of the file. Should begin 
+            with the substring "\g<1>". One use case for this field is when 
+            contexts are used. In that case a new type must be defined to hold 
+            the context data. For example:
+                "new_types": r\"\"\"\g<1>
+
+                struct array_context {
+                    struct ktf_context k;
+                    struct xarray *xa;
+                };
+
+                \"\"\",
+        ->  Skip this field unless new types are needed.
+
+        ["boilerplate_code"] : string (used in regex)
+        ->  The code added for this field will be added to the beginning of 
+            every function redefined with TEST. Should begin with the substring 
+            "\g<1>". One use case for this is to retrieve data from a context 
+            in the beginning of every TEST function.
+        ->  Skip this field unless code should be added to all TEST functions.
+
+        ["test_suite_name"] : string
+        ->  This string will be used by the TEST macro as the name for the test 
+            suite. Can be skipped if the "module_init()" is called. In that 
+            case, the argument used will be used as the name of the test suite.
+        ->  Skip this field unless "module_init()" is used, or a custom test 
+            suite name is desired.
+
+        ["replacements"] : tuple(regex, regex)
+        ->  The first regex specifies the pattern to replace, the second regex 
+            specifies the result. See the "convert_wrapper_xarray.py" file for 
+            an example.
+        ->  Skip this field unless simple patterns should be replaced.
+
+        ["context_args"] : string (used in regex)
+        ->  Parameters found in functions that should be redefined with TEST.
+            This field is used if either 
+            1) a set of common arguments should be supplied by a context 
+            instead, or 
+            2) if the parameters should be removed.
+
+            For example, if every test function to be redefined has "void" 
+            in their parameter lists, specify "void" as the value; likewise, if 
+            the test functions all have "struct xarray *xa" as parameter, use 
+            "struct xarray [*]xa" as a value. Note that the special character 
+            \* is enclosing in [], as the string will be used in a regex. This 
+            rule also applies to other special characters, such as ( and ).
+            
+            Multiple parameters can also be specified if they are separated by 
+            a |. For instance, "struct xarray [*]xa|void" means that the 
+            parameter list of a function can be either "struct xarray *xa" or 
+            a void. 
+        ->  Skip this field unless test functions are to be redefined with the 
+            TEST macro. In that case, the value of this field should represent 
+            old parameters that will be supplied in other ways, like through a 
+            fixture or a context.
+
+        ["common_call_args"] : string
+        ->  Serves pretty much the same purpose as ["context_args"], except 
+            that this is the value(s) used in the function CALLS instead of the 
+            function DEFINITION.
+
+            If the value for the ["context_args"] field is 
+            "struct xarray [*]xa", the value of this field could be "&array".
+        ->  Skip this field unless test functions are to be redefined with the 
+            TEST macro. In that case, the value of this field should represent 
+            the old argument value(s).
+
+        ["extra_dummy_args_call"] : string
+        ->  This field is used when creating dummy functions that wraps a 
+            function call. 
+            See the "convert_wrapper_xarray.py" file for an example.
+        ->  Skip this field unless dummy functions are going to be used.
     """
 
     def __init__(self, text, outfile_name, rules, debug=False):
@@ -50,7 +146,7 @@ class Converter(object):
         self._default_init_code = "KTF_INIT();\n\n\g<1>"
         self._default_exit_code = '\g<1>\n\tKTF_CLEANUP();'
         self._default_include_code = '\g<1>\n#include "ktf.h"\n'
-        self._default_cmn_test_args_call = ""
+        self._default_common_call_args = ""
         self._default_context_args = "void|''"
 
         # Argument handling:
@@ -62,46 +158,46 @@ class Converter(object):
         self._outfile_name = outfile_name
 
         # Names of all the functions to convert to TEST.
-        self._test_function_names = rules.get("test_funcs")
+        self._test_function_names = rules.get("test_functions")
 
         # Code to be added to the init function of the module, if any.
-        self._init_code = rules.get("init") or self._default_init_code
+        self._init_code = rules.get("init_code") or self._default_init_code
         
         # Code to be added to the exit function of the module, if any.
-        self._exit_code = rules.get("exit") or self._default_exit_code
+        self._exit_code = rules.get("exit_code") or self._default_exit_code
 
         # Code for header inclusion
-        self._include_code = rules.get("include") or self._default_include_code
+        self._include_code = rules.get("include_code") or self._default_include_code
 
         # Code for definition of structs and typedefs.
-        self._type_def_code = rules.get("new_types")
+        self._new_types = rules.get("new_types")
                 
         # Context code that should be added to the beginning
         # of every TEST function.
-        self._boilerplate_test_code = rules.get("boilerplate")
+        self._boilerplate_code = rules.get("boilerplate_code")
 
         # The name of the test suite itself.
-        self._test_suite_name = rules.get("suite_name")
+        self._test_suite_name = rules.get("test_suite_name")
 
         # Common arguments used by most test functions, which could be moved 
         # into a context instead. The default value is "void|''", meaning
         # no arguments. 
-        self._context_args = rules.get("ctx_args_def") or self._default_context_args
+        self._context_args = rules.get("context_args") or self._default_context_args
 
         # Common arguments often used when calling test functions. For the xarray suite,
         # this is the '&array' argument supplied to all test functions. For functions
         # without arguments, this could be '' or 'void'.
-        self._common_call_args = rules.get("cmn_test_args_call") or self._default_cmn_test_args_call
+        self._common_call_args = rules.get("common_call_args") or self._default_common_call_args
 
         # Replacement for _common_call_args for multi argument function calls
         # that needs to be put in a dummy function.
         self._common_call_multi_arg_replace = rules.get("extra_dummy_args_call")
 
         # The names of functions to be ignored.
-        self._ignore_func_names = rules.get("blacklist")
+        self._blacklist = rules.get("blacklist")
 
         # Specifies which assertions to convert to which KTF assertions.
-        self._assertion_replacements = rules.get("replacements")
+        self._replacements = rules.get("replacements")
 
         # Adds a new main function if set to True. The name of this new main 
         # function will be the function name argument in the call 'module_init' 
@@ -149,7 +245,7 @@ class Converter(object):
         self._wrapped_multi_arg_function_calls = "{func_name}({common_args}{extra_args});"
         self._new_main_name = "{old_name}_1"
         self._new_module_init = "module_init({new_main_name});\n"
-        self._new_main_and_module_init = "int {new_main_name}(void)\n{{\n\tADD_TEST({old_main});\n\n\treturn 0;\n}}\n\nmodule_init({new_main_name});"
+        self._new_main_and_module_init = "KTF_INIT();\n\nint {new_main_name}(void)\n{{\n\tADD_TEST({old_main});\n\n\treturn 0;\n}}\n\nmodule_init({new_main_name});"
 
         # Regexes used in this class
         self._regexes = {
@@ -188,13 +284,13 @@ class Converter(object):
         self._register_init_and_exit()
 
         self.dprintwl("self._test_function_names", self._test_function_names)
-        self.dprintwl("self._boilerplate_test_code", self._boilerplate_test_code)
+        self.dprintwl("self._boilerplate_code", self._boilerplate_code)
         self.dprintwl("self._test_suite_name", self._test_suite_name)
         self.dprintwl("self._init_code", self._init_code)
         self.dprintwl("self._exit_code", self._exit_code)
         self.dprintwl("self._include_code", self._include_code)
-        self.dprintwl("self._type_def_code", self._type_def_code)
-        self.dprintwl("self._boilerplate_test_code", self._boilerplate_test_code)
+        self.dprintwl("self._new_types", self._new_types)
+        self.dprintwl("self._boilerplate_code", self._boilerplate_code)
         self.dprintwl("self._context_args", self._context_args)
 
 
@@ -363,7 +459,7 @@ class Converter(object):
         print("_local_helper_func_names: ")
         for h in self._local_helper_function_names:
             print(h)
-        return test_name not in self._ignore_func_names and \
+        return test_name not in self._blacklist and \
             (test_name in self._local_helper_function_names or \
             test_name in self._test_function_names)
 
@@ -421,11 +517,11 @@ class Converter(object):
 
     def _convert_assertions_to_KTF(self, matches):
         """
-        Replaces assertions from the self._assertion_replacements
+        Replaces assertions from the self._replacements
         list of tuples to the corresponding right KTF assertion.
         """
         func_name_with_left_par = matches.group(1)
-        for item in self._assertion_replacements:
+        for item in self._replacements:
             if item[0]+"(" == func_name_with_left_par:
                 return item[1]+"("
         return matches.group(1)
@@ -470,7 +566,7 @@ class Converter(object):
         """
         return self._sub(
             self._regexes['includes_end'],
-            self._type_def_code)
+            self._new_types)
 
     def convert_to_test_common_args(self):
         """
@@ -542,22 +638,22 @@ class Converter(object):
             self._regexes['function_calls_without_args'],
             self._add_extra_args_if_valid_call_no_args)
 
-    def convert_assertions(self):
+    def use_replacements(self):
         """
         Converts assertions calls to KTF assertions.
         """
-        for pattern in self._assertion_replacements:
+        for pattern in self._replacements:
             self._text = re.sub(pattern[0], pattern[1], self._text, flags=re.MULTILINE)
         return self
 
-    def add_boilerplate_test_code(self):
+    def add_boilerplate_code(self):
         """
         Adds boilerplate test code to all test functions defined 
         with the TEST macro. This can for example
         """
         return self._sub(
             self._regexes['test_macro_function'],
-            self._boilerplate_test_code)
+            self._boilerplate_code)
 
     def _add_new_main(self):
         """

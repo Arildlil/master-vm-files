@@ -20,7 +20,7 @@ with open(full_source_path, 'r') as f:
 # |----------------------------------------------|
 
 test_xarray_rules = {
-    "test_funcs":
+    "test_functions":
     """
     check_xa_err 
     check_xas_retry
@@ -43,7 +43,7 @@ test_xarray_rules = {
 	check_workingset
     """,
 
-    "init": 
+    "init_code": 
 r"""static struct array_context cxa = { .xa = &array };
 
 KTF_INIT();
@@ -52,14 +52,14 @@ KTF_INIT();
     \tKTF_CONTEXT_ADD(&cxa.k, "array");
 """,
 
-    "exit":
+    "exit_code":
 r"""\g<1>
     struct ktf_context *pctx = KTF_CONTEXT_FIND("array");
     KTF_CONTEXT_REMOVE(pctx);
 
     KTF_CLEANUP();""",
 
-    "include": r"""\g<1>
+    "include_code": r"""\g<1>
 #include "ktf.h" 
 
 """,
@@ -73,17 +73,17 @@ struct array_context {
 
 """,
 
-    "boilerplate": 
+    "boilerplate_code": 
 r"""\g<1>
-        struct array_context *actx = KTF_CONTEXT_GET("array", struct array_context);
-        struct xarray *xa = actx->xa;
+    struct array_context *actx = KTF_CONTEXT_GET("array", struct array_context);
+    struct xarray *xa = actx->xa;
 """,
 
-    "suite_name": "test_xarray_rewrite",
+    "test_suite_name": "test_xarray_rewrite",
 
-    "ctx_args_def": "struct xarray [*]xa|void",
+    "context_args": "struct xarray [*]xa|void",
 
-    "cmn_test_args_call": "&array",
+    "common_call_args": "&array",
 
     "extra_dummy_args_call": "xa",
 
@@ -106,8 +106,8 @@ state.add_include_code() \
     .convert_to_test_common_args() \
     .convert_to_test_extra_args() \
     .convert_calls_to_add_test() \
-    .add_boilerplate_test_code() \
+    .add_boilerplate_code() \
     .add_extra_parameters_to_helpers_and_multi_arg_defs() \
     .add_self_argument_to_helper_calls() \
-    .convert_assertions() \
+    .use_replacements() \
     .result()
