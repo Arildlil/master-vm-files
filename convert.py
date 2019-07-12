@@ -246,6 +246,7 @@ class Converter(object):
         self._new_main_name = "{old_name}_1"
         self._new_module_init = "module_init({new_main_name});\n"
         self._new_main_and_module_init = "KTF_INIT();\n\nint {new_main_name}(void)\n{{\n\tADD_TEST({old_main});\n\n\treturn 0;\n}}\n\nmodule_init({new_main_name});"
+        self._single_space = " "
 
         # Regexes used in this class
         self._regexes = {
@@ -267,6 +268,7 @@ class Converter(object):
             'find_exact_match': "({pattern})",
             'function_calls_without_args': "(((\w)+)(\(\)))",
             'multi_arg_test_function_calls': "(([a-zA-Z0-9_]*)\(({common_args}), *(.*?)\));",
+            'find__init_and_exit': "\s(__init|__exit)\s",
         }
             
 
@@ -276,12 +278,14 @@ class Converter(object):
         self._register_local_functions()
         self._register_helper_functions()
 
+        # Calls to conversion methods:
+        # --------------------------------
         if self._should_add_new_main:
             self._add_new_main()
-        
-        # This action is repeated in case the "_add_new_main" method changes
-        # the init function name.
-        self._register_init_and_exit()
+            # This action is repeated because "_add_new_main" method changes
+            # the init function name.
+            self._register_init_and_exit()
+        self._remove_init_and_exit_macro_calls()
 
         self.dprintwl("self._test_function_names", self._test_function_names)
         self.dprintwl("self._boilerplate_code", self._boilerplate_code)
@@ -668,6 +672,16 @@ class Converter(object):
             self._new_main_and_module_init.format(
                 new_main_name=new_main_name, old_main=old_main_name))
         return self
+
+    def _remove_init_and_exit_macro_calls(self):
+        """
+        Removes all occurences of __init and __exit from the code. This is 
+        important as the use of these macros can cause problems when KTF runs 
+        the file.
+        """
+        self._sub(
+            self._regexes['find__init_and_exit'],
+            self._single_space)
 
     
     # Other methods.

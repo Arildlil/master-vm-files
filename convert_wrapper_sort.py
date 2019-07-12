@@ -45,7 +45,7 @@ test_sort_rules_2 = {
     "blacklist": ["cmpint"],
 
     "replacements": [
-        ("return err;", "ASSERT_INT_NE(err, 0);")
+        ("return err;", "ASSERT_INT_EQ(err, 0);")
     ],
     
     "should_add_new_main": True
