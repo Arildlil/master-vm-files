@@ -10,9 +10,6 @@ print("Converting " + source_file_name)
 print("Input file path: " + full_source_path)
 print("Output path: " + full_target_path)
 
-with open(full_source_path, 'r') as f:
-    data = f.read()
-
 
 
 # |----------------------------------------------|
@@ -98,7 +95,7 @@ r"""\g<1>
     "should_add_new_main": False
 }
 
-state = Converter(data, full_target_path, test_xarray_rules, True)
+state = Converter(full_source_path, full_target_path, test_xarray_rules, True)
 state.add_include_code() \
     .add_init_code_to_main() \
     .add_exit_code() \

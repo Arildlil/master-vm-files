@@ -139,7 +139,7 @@ class Converter(object):
         ->  Skip this field unless dummy functions are going to be used.
     """
 
-    def __init__(self, text, outfile_name, rules, debug=False):
+    def __init__(self, input_file_name, outfile_name, rules, debug=False):
 
         # Default KTF snippets
         # --------------------
@@ -152,7 +152,8 @@ class Converter(object):
         # Argument handling:
         # ------------------
         # All the contents of the source file.
-        self._text = text
+        with open(input_file_name, 'r') as f:
+            self._text = f.read()
 
         # The name of the file to write output to.
         self._outfile_name = outfile_name
@@ -575,9 +576,9 @@ class Converter(object):
     def convert_to_test_common_args(self):
         """
         Converts all specified test functions to TEST functions,
-        given that they do not take any extra arguments compared 
-        to the common ones. For example, for test_xarray.c, 
-        'struct xarray *xa' is considered common arguments, and all
+        given that they do not take any others parameters than  
+        the common ones. For example, for test_xarray.c, 
+        'struct xarray *xa' is considered a common parameter, and all
         test functions only taking this single argument will be 
         matched. Test functions with additional arguments will 
         therefore NOT be matched here.
