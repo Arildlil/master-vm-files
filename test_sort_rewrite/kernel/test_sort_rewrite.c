@@ -12,7 +12,7 @@ static int cmpint(const void *a, const void *b)
 	return *(int *)a - *(int *)b;
 }
 
-TEST(test_sort_init, test_sort_init) {
+TEST(test_sort_rewrite, test_sort_init) {
 
 	int *a, i, r = 1, err = -ENOMEM;
 

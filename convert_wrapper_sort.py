@@ -16,28 +16,11 @@ print("Output path: " + full_target_path)
 # | Conversion rules for "test_sort_rewrite.c" |
 # |----------------------------------------------|
 
-test_sort_rules = {
-    "test_functions":
-    """
-    test_sort_init
-    """,
-    
-    "test_suite_name": "test_sort_rewrite",
-    
-    "blacklist": ["cmpint"],
-    
-    "replacements": [
-        (
-r"""if (!a)
-		return err;""", "ASSERT_INT_NE(a,0);")
-    ]
-}
-
 test_sort_rules_2 = {
     "test_functions":
-    """
-    test_sort_init
-    """,
+    ["test_sort_init"],
+
+    "test_suite_name": "test_sort_rewrite",
     
     "blacklist": ["cmpint"],
 
@@ -55,7 +38,3 @@ state.add_include_code() \
     .convert_to_test_common_args() \
     .use_replacements() \
     .result()
-    #.convert_to_test_common_args() \
-    #.convert_calls_to_add_test() \
-    #.convert_assertions() \
-    #.result()

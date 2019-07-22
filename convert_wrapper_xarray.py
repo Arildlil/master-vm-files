@@ -18,28 +18,12 @@ print("Output path: " + full_target_path)
 
 test_xarray_rules = {
     "test_functions":
-    """
-    check_xa_err 
-    check_xas_retry
-	check_xa_load
-	check_xa_mark 
-    check_xa_shrink 
-	check_xas_erase 
-	check_cmpxchg 
-	check_reserve 
-	check_multi_store 
-	check_xa_alloc 
-	check_find 
-	check_find_entry 
-	check_account 
-	check_destroy 
-	check_move 
-	check_create_range 
-	check_store_range 
-	check_store_iter
-	check_workingset
-    """,
-
+        ["check_xa_err", "check_xas_retry", "check_xa_load", "check_xa_mark", 
+        "check_xa_shrink", "check_xas_erase", "check_cmpxchg", "check_reserve", 
+        "check_multi_store", "check_xa_alloc", "check_find", "check_find_entry", 
+        "check_account", "check_destroy", "check_move", "check_create_range", 
+        "check_store_range", "check_store_iter", "check_workingset"],
+    
     "init_code": 
 r"""static struct array_context cxa = { .xa = &array };
 
@@ -62,7 +46,6 @@ r"""\g<1>
 """,
 
     "new_types": r"""\g<1>
-
 struct array_context {
     struct ktf_context k;
     struct xarray *xa;
@@ -75,23 +58,16 @@ r"""\g<1>
     struct array_context *actx = KTF_CONTEXT_GET("array", struct array_context);
     struct xarray *xa = actx->xa;
 """,
-
     "test_suite_name": "test_xarray_rewrite",
-
     "context_args": "struct xarray [*]xa|void",
-
     "common_call_args": "&array",
-
     "extra_dummy_args_call": "xa",
-
     "blacklist": ["test_update_node", "xa_load", "xa_alloc", "xas_retry", "xa_err"],
-
     "replacements": [
         (r"(^\s*)(XA_BUG_ON[(]xa, *)", "\g<1>EXPECT_FALSE("),
         (r"(^\s*)(XA_BUG_ON[(]&xa0, *)", "\g<1>EXPECT_FALSE("),
         (r"(^\s*)(XA_BUG_ON[(]NULL, *)", "\g<1>EXPECT_FALSE(")
     ],
-
     "should_add_new_main": False
 }
 

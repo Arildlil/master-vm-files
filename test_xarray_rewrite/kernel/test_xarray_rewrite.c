@@ -8,7 +8,6 @@
 #include <linux/xarray.h>
 #include <linux/module.h>
 #include "ktf.h" 
-
 struct array_context {
     struct ktf_context k;
     struct xarray *xa;
